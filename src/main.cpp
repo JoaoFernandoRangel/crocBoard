@@ -2,13 +2,14 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h> // Inclua a biblioteca ArduinoJson
 #include <Update.h>
-#include <ArduinoHttpClient.h>
+
+//teste
+
 // Configurações WiFi
 const char* ssid = "adivinha";
 const char* password = "ALTernat1v0";
 
 int k = 0;
-
 int vetorTeste1[] = {
     12, 45, 67, 23, 89, 34, 56, 78, 90, 11,
     22, 33, 44, 55, 66, 77, 88, 99, 10, 21,
