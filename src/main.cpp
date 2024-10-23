@@ -25,7 +25,7 @@ void sendData(float v1, float v2);
 void reconnect();
 void callback(char *topic, byte *payload, unsigned int length);
 void setup_wifi();
-void fazLeitura(float &Altura, float &Temperatura);
+void fazLeitura(float &Alt, float &Temp);
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -52,8 +52,8 @@ void loop()
 
   if (millis() - t > retornaSegundo(1))
   {
-    // fazLeitura(Altura, Temperatura);
-    // sendData(Altura, Temperatura);
+    fazLeitura(Altura, Temperatura);
+    sendData(Altura, Temperatura);
     t = millis();
   }
   if (Altura > setpoint1)
@@ -65,6 +65,12 @@ void loop()
     digitalWrite(LED_VOL, HIGH);
   }
 }
+
+void fazLeitura(float &Alt, float &Temp){
+  //Funções referentes aos sensores ultrassônico e DHT22
+}
+
+
 
 void setup_wifi()
 {
