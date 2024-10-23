@@ -2,9 +2,19 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h> // Inclua a biblioteca ArduinoJson
 #include <Update.h>
+#include <DHTesp.h>
 
+
+int setpoint1, setpoint2;
+int sensorPin = 15;
+DHTesp sensor;
+
+float duration_us, distance_cm;
+
+#define TRIG_PIN 4
+#define ECHO_PIN 2
 #define LED_VOL 12
-#define LED_TEMP 13
+#define LED_TEMP 14
 
 #define retornaSegundo(x) (1000*(x))
 
@@ -33,6 +43,14 @@ PubSubClient client(espClient);
 void setup()
 {
   Serial.begin(9600);
+  sensor.setup(sensorPin, DHTesp::DHT22);
+  
+  pinMode(TRIG_PIN, OUTPUT);
+  // configure the echo pin to input mode
+  pinMode(ECHO_PIN, INPUT);
+  pinMode(LED_TEMP, OUTPUT);
+  pinMode(LED_VOL, OUTPUT);
+
   setup_wifi();
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
@@ -56,18 +74,37 @@ void loop()
     sendData(Altura, Temperatura);
     t = millis();
   }
+
+
   if (Altura > setpoint1)
   {
     digitalWrite(LED_VOL, LOW);
   }
-  else
+  else{digitalWrite(LED_VOL, HIGH);}
+
+
+  if (Temperatura > setpoint2)
   {
-    digitalWrite(LED_VOL, HIGH);
+    digitalWrite(LED_TEMP, LOW);
   }
+  else{digitalWrite(LED_TEMP, HIGH);}
 }
 
 void fazLeitura(float &Alt, float &Temp){
   //Funções referentes aos sensores ultrassônico e DHT22
+  TempAndHumidity data = sensor.getTempAndHumidity();
+  Temp = data.temperature;
+
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+ 
+  // measure duration of pulse from ECHO pin
+  duration_us = pulseIn(ECHO_PIN, HIGH);
+  
+  // calculate the distance
+  Alt = 0.017 * duration_us;
+  Alt = Alt/4;
 }
 
 
@@ -93,7 +130,7 @@ void setup_wifi()
   Serial.println(WiFi.localIP());
 }
 
-int setpoint1, setpoint2;
+
 void callback(char *topic, byte *payload, unsigned int length)
 {
   /*
