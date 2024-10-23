@@ -13,13 +13,13 @@ NTPClient _timeClient(_ntpUDP, "pool.ntp.org", -10800);
 #define retornaMinuto(x) (60 * 1000 * (x))
 #define retornaHora(x) (60 * 60 * 1000 * (x))
 #define RelePin 27
-unsigned long tOn = 5, tOff = 1;
+unsigned long tOn = 15, tOff = 4;
 unsigned long flagT, t0;
 bool ligado = false;
 
 // Configurações WiFi
-const char *ssid = "S23";
-const char *password = "bemvindo";
+const char *ssid = "Bia 2";
+const char *password = "coisafacil";
 
 // Configurações do ThingsBoard
 const char *mqtt_server = "demo.thingsboard.io";
@@ -86,8 +86,8 @@ void thingsBoardTask(void *pvParameters)
     if (acc1)
     {
       digitalWrite(RelePin, !acc1); // Liga o relé
-      if (millis() - t0 > retornaSegundo(tOn))
-      // if (millis() - t0 > retornaMinuto(tOn))
+      // if (millis() - t0 > retornaSegundo(tOn))
+      if (millis() - t0 > retornaMinuto(tOn))
       {
         acc1 = false;
         digitalWrite(RelePin, !acc1); // Desliga o relé
