@@ -24,8 +24,8 @@ const char *ssid = "Wokwi-GUEST";
 const char *password = "";
 
 // Configurações do ThingsBoard
-const char *mqtt_server = "demo.thingsboard.io";
-const char *mqtt_token = "vd5NpYwDMOXrtCYZUFfa";
+const char *mqtt_server = "";
+const char *mqtt_token = "";
 
 // Variáveis de Tempo
 unsigned long t;
