@@ -2,112 +2,140 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h> // Inclua a biblioteca ArduinoJson
 #include <Update.h>
-#include <DHTesp.h>
-
-
-int setpoint1, setpoint2;
-int sensorPin = 15;
-DHTesp sensor;
-
-float duration_us, distance_cm;
-
-#define TRIG_PIN 4
-#define ECHO_PIN 2
-#define LED_VOL 12
-#define LED_TEMP 14
-
-#define retornaSegundo(x) (1000*(x))
-
-
-// Configurações WiFi
-const char *ssid = "Wokwi-GUEST";
-const char *password = "";
-
-// Configurações do ThingsBoard
-const char *mqtt_server = "demo.thingsboard.io";
-const char *mqtt_token = "vd5NpYwDMOXrtCYZUFfa";
-
-// Variáveis de Tempo
-unsigned long t;
-float Altura, Temperatura;
-
-void sendData(float v1, float v2);
-void reconnect();
-void callback(char *topic, byte *payload, unsigned int length);
-void setup_wifi();
-void fazLeitura(float &Alt, float &Temp);
+#include <NTPClient.h>
 
 WiFiClient espClient;
 PubSubClient client(espClient);
+WiFiUDP _ntpUDP;
+NTPClient _timeClient(_ntpUDP, "pool.ntp.org", -10800);
+
+#define retornaSegundo(x) (1000 * (x))
+#define retornaMinuto(x) (60 * 1000 * (x))
+#define retornaHora(x) (60 * 60 * 1000 * (x))
+#define RelePin 27
+unsigned long tOn = 5, tOff = 1;
+unsigned long flagT, t0;
+bool ligado = false;
+
+// Configurações WiFi
+const char *ssid = "S23";
+const char *password = "bemvindo";
+
+// Configurações do ThingsBoard
+const char *mqtt_server = "demo.thingsboard.io";
+const char *mqtt_token = "C14W6ZGOQKxuKucdCFMj";
+
+// Variáveis de Tempo
+unsigned long t;
+uint8_t acc1, cont = 0;
+
+bool sendData(uint8_t porta1, String timestamp, uint8_t contador, unsigned long TON);
+void reconnect();
+void callback(char *topic, byte *payload, unsigned int length);
+void setup_wifi();
+void thingsBoardTask(void *pvParameters);
+void autoOpTask(void *pvParameters);
 
 void setup()
 {
   Serial.begin(9600);
-  sensor.setup(sensorPin, DHTesp::DHT22);
-  
-  pinMode(TRIG_PIN, OUTPUT);
-  // configure the echo pin to input mode
-  pinMode(ECHO_PIN, INPUT);
-  pinMode(LED_TEMP, OUTPUT);
-  pinMode(LED_VOL, OUTPUT);
-
+  pinMode(RelePin, OUTPUT);
+  digitalWrite(RelePin, HIGH);
   setup_wifi();
+  _timeClient.begin();
+  _timeClient.update();
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
+  xTaskCreatePinnedToCore(thingsBoardTask, "thingsBoardTask", 10000, NULL, 1, NULL, 1); // Executa no núcleo APP (Core 1)
+  xTaskCreatePinnedToCore(autoOpTask, "autoOpTask", 10000, NULL, 1, NULL, 0);           // Executa no núcleo PRO (Core 0)
 }
 
+unsigned long agora, antes0, antes1;
+bool flag = false, panic = false;
 void loop()
 {
-  if (client.connected())
-  {
-    client.loop();
-  }
-  else
-  {
-    reconnect();
-  }
-  
-
-  if (millis() - t > retornaSegundo(1))
-  {
-    fazLeitura(Altura, Temperatura);
-    sendData(Altura, Temperatura);
-    t = millis();
-  }
-
-
-  if (Altura > setpoint1)
-  {
-    digitalWrite(LED_VOL, LOW);
-  }
-  else{digitalWrite(LED_VOL, HIGH);}
-
-
-  if (Temperatura > setpoint2)
-  {
-    digitalWrite(LED_TEMP, LOW);
-  }
-  else{digitalWrite(LED_TEMP, HIGH);}
+  vTaskSuspend(NULL); // O loop original está vazio pois a task loopTask está rodando no Core 1
 }
 
-void fazLeitura(float &Alt, float &Temp){
-  //Funções referentes aos sensores ultrassônico e DHT22
-  TempAndHumidity data = sensor.getTempAndHumidity();
-  Temp = data.temperature;
-
-  digitalWrite(TRIG_PIN, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(TRIG_PIN, LOW);
- 
-  // measure duration of pulse from ECHO pin
-  duration_us = pulseIn(ECHO_PIN, HIGH);
-  
-  // calculate the distance
-  Alt = 0.017 * duration_us;
-  Alt = Alt/4;
+// Task que executa o conteúdo original do loop() no núcleo APP (Core 1)
+void thingsBoardTask(void *pvParameters)
+{
+  while (true)
+  {
+    if (client.connected())
+    {
+      client.loop();
+      if (millis() - t > retornaSegundo(1))
+      {
+        if (sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn))
+        {
+          cont++;
+          _timeClient.update();
+        }
+        else
+        {
+          cont = 1;
+        }
+        t = millis();
+      }
+    }
+    else
+    {
+      reconnect();
+    }
+    if (acc1)
+    {
+      digitalWrite(RelePin, !acc1); // Liga o relé
+      if (millis() - t0 > retornaSegundo(tOn))
+      // if (millis() - t0 > retornaMinuto(tOn))
+      {
+        acc1 = false;
+        digitalWrite(RelePin, !acc1); // Desliga o relé
+        t0 = millis();
+      }
+    }
+    else
+    {
+      t0 = millis();
+    }
+    if (panic)
+    {
+      digitalWrite(RelePin, panic);
+    }
+    vTaskDelay(10 / portTICK_PERIOD_MS); // Pequeno delay para não ocupar 100% da CPU
+  }
 }
 
-
+// Task que executa a função autoOp no núcleo PRO (Core 0)
+void autoOpTask(void *pvParameters)
+{
+  while (true)
+  {
+    agora = millis();
+    // Se a bomba está desligada e o tempo toff passou
+    // if (!flag && (agora - antes0 >= retornaMinuto(tOff)))
+    if (!flag && (agora - antes0 >= retornaHora(tOff)))
+    {
+      Serial.printf("Passou %d minuto\n", tOff);
+      Serial.printf("Bomba Ligada\n");
+      antes0 = agora; // Atualiza o tempo de referência para o próximo acionamento
+      antes1 = agora; // Atualiza o tempo de referência para o próximo acionamento
+      digitalWrite(RelePin, false);
+      flag = true; // Liga a bomba
+    }
+    // Se a bomba está ligada e o tempo ton passou
+    // else if (flag && (agora - antes1 >= retornaSegundo(tOn)))
+    else if (flag && (agora - antes1 >= retornaMinuto(tOn)))
+    {
+      Serial.printf("Passou %d segundos\n", tOn);
+      Serial.printf("Bomba Desligada\n");
+      antes1 = agora; // Atualiza o tempo de referência para o próximo desligamento
+      digitalWrite(RelePin, true);
+      flag = false; // Desliga a bomba
+    }
+    vTaskDelay(100 / portTICK_PERIOD_MS); // Define a frequência de execução da autoOp
+  }
+}
 
 void setup_wifi()
 {
@@ -130,13 +158,13 @@ void setup_wifi()
   Serial.println(WiFi.localIP());
 }
 
-
 void callback(char *topic, byte *payload, unsigned int length)
 {
   /*
   Mensagem recebida [v1/devices/me/rpc/request/25]: {"method":"slider2","params":80}
   Mensagem recebida [v1/devices/me/rpc/request/26]: {"method":"slider1","params":60}
   */
+
   // Converta o payload para uma string
   String message;
   for (unsigned int i = 0; i < length; i++)
@@ -147,19 +175,22 @@ void callback(char *topic, byte *payload, unsigned int length)
   Serial.print(topic);
   Serial.print("]: ");
   Serial.println(message);
-  // Parseie a mensagem JSON
+  // Mensagem recebida [v1/devices/me/rpc/request/28]: {"method":"acc","params":false}
+  //  Parseie a mensagem JSON
   StaticJsonDocument<200> doc;
   DeserializationError error = deserializeJson(doc, message);
-  if (message.indexOf("slider2") > -1)
+  if (message.indexOf("acc1") > -1)
   {
-    setpoint2 = doc["params"];
+    acc1 = doc["params"];
   }
-  if (message.indexOf("slider1") > -1)
+  if (message.indexOf("tOn") > -1)
   {
-    setpoint1 = doc["params"];
+    tOn = doc["params"];
   }
-  Serial.printf("Slider1 = %d\n", setpoint1);
-  Serial.printf("Slider2 = %d\n", setpoint2);
+  if (message.indexOf("panic") > -1)
+  {
+    panic = doc["params"];
+  }
 }
 
 void reconnect()
@@ -182,12 +213,22 @@ void reconnect()
   }
 }
 
-void sendData(float Altura, float Temperatura)
+bool sendData(uint8_t porta1, String timestamp, uint8_t contador, unsigned long TON)
 {
   StaticJsonDocument<200> doc;
-  doc["fuelLevel"] = Altura;        // distância
-  doc["temperature"] = Temperatura; // Temperatura
+  doc["porta1"] = porta1; // distância
+  doc["timestamp"] = timestamp;
+  doc["contador"] = contador;
+  doc["tOn"] = TON;
   char buffer[256];
   size_t packetsize = serializeJson(doc, buffer);
-  client.publish("v1/devices/me/telemetry", buffer, packetsize);
+  if (client.publish("v1/devices/me/telemetry", buffer, packetsize))
+  {
+    Serial.println(buffer);
+    return true;
+  }
+  else
+  {
+    return false;
+  }
 }
