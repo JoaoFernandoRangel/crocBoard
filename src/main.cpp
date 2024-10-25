@@ -145,8 +145,14 @@ void setup_wifi(uint8_t &contadorWiFi) {
         Serial.print(".");
         contadorWiFi++;
     }
-    if (contadorWiFi == 100) {
-        ESP.restart();
+    unsigned long t1;
+    if (contadorWiFi == 100) { 
+        t1 = millis();
+        while(true){
+          if(millis() - t1 > retornaHora(1)){
+            break;
+          }
+        }
     } else {
         contadorWiFi = 0;
     }
