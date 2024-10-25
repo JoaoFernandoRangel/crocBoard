@@ -21,6 +21,8 @@ bool ligado = false;
 // Configurações WiFi
 const char *ssid = "Bia 2";
 const char *password = "coisafacil";
+// const char *ssid = "S23";
+// const char *password = "bemvindo";
 
 // Configurações do ThingsBoard
 const char *mqtt_server = "demo.thingsboard.io";
@@ -28,14 +30,14 @@ const char *mqtt_token = "C14W6ZGOQKxuKucdCFMj";
 
 // Variáveis de Controle
 unsigned long t;
-uint8_t acc1, cont = 0, contadorMQTT, contadorWiFi;
+uint8_t acc1, cont = 0, contadorMQTT = 0, contadorWiFi = 0;
 unsigned long agora, antes0, antes1;
 bool flag = false, panic = false;
 
 bool sendData(uint8_t porta1, String timestamp, uint8_t contador, unsigned long TON);
 void reconnectMQTT(uint8_t &contadorMQTT);
 void callback(char *topic, byte *payload, unsigned int length);
-void setup_wifi(uint8_t &contadorWiFi);
+void setup_wifi();
 void thingsBoardTask(void *pvParameters);
 void autoOpTask(void *pvParameters);
 
@@ -44,7 +46,7 @@ void setup() {
     pinMode(RelePin, OUTPUT);
     pinMode(WiFi_LED, OUTPUT);
     digitalWrite(RelePin, HIGH);
-    setup_wifi(contadorWiFi);
+    setup_wifi();
     _timeClient.begin();
     _timeClient.update();
     client.setServer(mqtt_server, 1883);
@@ -81,7 +83,7 @@ void thingsBoardTask(void *pvParameters) {
         } else {
             digitalWrite(WiFi_LED, LOW);  // Acende Led WiFi
             WiFi.disconnect();
-            setup_wifi(contadorWiFi);
+            setup_wifi();
         }
         if (acc1) {
             digitalWrite(RelePin, !acc1);  // Liga o relé
@@ -111,7 +113,7 @@ void autoOpTask(void *pvParameters) {
     while (true) {
         agora = millis();
         // Se a bomba está desligada e o tempo toff passou
-        // if (!flag && (agora - antes0 >= retornaMinuto(tOff)))
+        // if (!flag && (agora - antes0 >= retornaSegundo(30))){
         if (!flag && (agora - antes0 >= retornaHora(tOff))) {
             Serial.printf("Passou %d minuto\n", tOff);
             Serial.printf("Bomba Ligada\n");
@@ -134,24 +136,31 @@ void autoOpTask(void *pvParameters) {
 }
 
 // TODO - trocar por função de busca em JSON
-void setup_wifi(uint8_t &contadorWiFi) {
+void setup_wifi() {
     delay(10);
     Serial.println();
     Serial.print("Conectando a ");
     Serial.println(ssid);
     WiFi.begin(ssid, password);
-    while (WiFi.status() != WL_CONNECTED && contadorWiFi <= 100) {
+    while (WiFi.status() != WL_CONNECTED && contadorWiFi <= 10) {
         delay(500);
         Serial.print(".");
         contadorWiFi++;
     }
-    unsigned long t1;
-    if (contadorWiFi == 100) { 
+    unsigned long t1, t2, agoraw;
+    if (contadorWiFi >= 10) {
         t1 = millis();
-        while(true){
-          if(millis() - t1 > retornaHora(1)){
-            break;
-          }
+        t2 = millis();
+        while (true) {
+            agoraw = millis();
+            // if (agoraw - t1 > retornaHora(1)) {
+            if (agoraw - t1 > retornaMinuto(1)) {
+                break;
+            }
+            if (agoraw - t2 > 500) {
+                digitalWrite(WiFi_LED, !digitalRead(WiFi_LED));
+                t2 = millis();
+            }
         }
     } else {
         contadorWiFi = 0;
@@ -186,6 +195,7 @@ void callback(char *topic, byte *payload, unsigned int length) {
     }
     if (message.indexOf("tOn") > -1) {
         tOn = doc["params"];
+        sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn);
     }
     if (message.indexOf("panic") > -1) {
         panic = doc["params"];
