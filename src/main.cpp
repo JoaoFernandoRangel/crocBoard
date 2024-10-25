@@ -13,6 +13,7 @@ NTPClient _timeClient(_ntpUDP, "pool.ntp.org", -10800);
 #define retornaMinuto(x) (60 * 1000 * (x))
 #define retornaHora(x) (60 * 60 * 1000 * (x))
 #define RelePin 27
+#define WiFi_LED 19
 unsigned long tOn = 15, tOff = 4;
 unsigned long flagT, t0;
 bool ligado = false;
@@ -25,22 +26,25 @@ const char *password = "coisafacil";
 const char *mqtt_server = "demo.thingsboard.io";
 const char *mqtt_token = "C14W6ZGOQKxuKucdCFMj";
 
-// Variáveis de Tempo
+// Variáveis de Controle
 unsigned long t;
-uint8_t acc1, cont = 0;
+uint8_t acc1, cont = 0, contadorMQTT, contadorWiFi;
+unsigned long agora, antes0, antes1;
+bool flag = false, panic = false;
 
 bool sendData(uint8_t porta1, String timestamp, uint8_t contador, unsigned long TON);
-void reconnect();
+void reconnectMQTT(uint8_t &contadorMQTT);
 void callback(char *topic, byte *payload, unsigned int length);
-void setup_wifi();
+void setup_wifi(uint8_t &contadorWiFi);
 void thingsBoardTask(void *pvParameters);
 void autoOpTask(void *pvParameters);
 
 void setup() {
     Serial.begin(9600);
     pinMode(RelePin, OUTPUT);
+    pinMode(WiFi_LED, OUTPUT);
     digitalWrite(RelePin, HIGH);
-    setup_wifi();
+    setup_wifi(contadorWiFi);
     _timeClient.begin();
     _timeClient.update();
     client.setServer(mqtt_server, 1883);
@@ -49,28 +53,35 @@ void setup() {
     xTaskCreatePinnedToCore(autoOpTask, "autoOpTask", 10000, NULL, 1, NULL, 0);            // Executa no núcleo PRO (Core 0)
 }
 
-unsigned long agora, antes0, antes1;
-bool flag = false, panic = false;
 void loop() {
     vTaskSuspend(NULL);  // O loop original está vazio pois a task loopTask está rodando no Core 1
 }
 
+uint8_t digitalReadOld;
 // Task que executa o conteúdo original do loop() no núcleo APP (Core 1)
 void thingsBoardTask(void *pvParameters) {
+    digitalReadOld = digitalRead(RelePin);
     while (true) {
-        if (client.connected()) {
-            client.loop();
-            if (millis() - t > retornaSegundo(1)) {
-                if (sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn)) {
-                    cont++;
-                    _timeClient.update();
-                } else {
-                    cont = 1;
+        if (WiFi.status() == WL_CONNECTED) {  // Se conectado na WiFi
+            digitalWrite(WiFi_LED, HIGH);     // Acende Led WiFi
+            if (client.connected()) {         // Se conectado no broker
+                client.loop();
+                if (millis() - t > retornaSegundo(30)) {
+                    if (sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn)) {
+                        cont++;
+                        _timeClient.update();
+                    } else {
+                        cont = 1;
+                    }
+                    t = millis();
                 }
-                t = millis();
+            } else {
+                reconnectMQTT(contadorMQTT);
             }
         } else {
-            reconnect();
+            digitalWrite(WiFi_LED, LOW);  // Acende Led WiFi
+            WiFi.disconnect();
+            setup_wifi(contadorWiFi);
         }
         if (acc1) {
             digitalWrite(RelePin, !acc1);  // Liga o relé
@@ -84,7 +95,12 @@ void thingsBoardTask(void *pvParameters) {
             t0 = millis();
         }
         if (panic) {
-            digitalWrite(RelePin, panic);
+            digitalWrite(RelePin, panic);  // desliga o relé
+            acc1 = false;                  // para o timer
+        }
+        if (digitalReadOld != digitalRead(RelePin)) {  // Se houve mudança de estado envia para o servidor
+            sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn);
+            digitalReadOld = digitalRead(RelePin);
         }
         vTaskDelay(10 / portTICK_PERIOD_MS);  // Pequeno delay para não ocupar 100% da CPU
     }
@@ -117,19 +133,23 @@ void autoOpTask(void *pvParameters) {
     }
 }
 
-void setup_wifi() {
+// TODO - trocar por função de busca em JSON
+void setup_wifi(uint8_t &contadorWiFi) {
     delay(10);
     Serial.println();
     Serial.print("Conectando a ");
     Serial.println(ssid);
-
     WiFi.begin(ssid, password);
-
-    while (WiFi.status() != WL_CONNECTED) {
+    while (WiFi.status() != WL_CONNECTED && contadorWiFi <= 100) {
         delay(500);
         Serial.print(".");
+        contadorWiFi++;
     }
-
+    if (contadorWiFi == 100) {
+        ESP.restart();
+    } else {
+        contadorWiFi = 0;
+    }
     Serial.println("");
     Serial.println("WiFi conectado");
     Serial.println("Endereço IP: ");
@@ -166,17 +186,19 @@ void callback(char *topic, byte *payload, unsigned int length) {
     }
 }
 
-void reconnect() {
-    while (!client.connected()) {
+void reconnectMQTT(uint8_t &contadorMQTT) {
+    while (!client.connected() && contadorMQTT < 15) {
         Serial.print("Tentando conectar ao MQTT...");
         if (client.connect("ESP32Client", mqtt_token, NULL)) {
             Serial.println("Conectado");
             client.subscribe("v1/devices/me/rpc/request/+");
+            contadorMQTT = 0;
         } else {
             Serial.print("falhou, rc=");
             Serial.print(client.state());
             Serial.println(" tente novamente em 5 segundos");
             delay(5000);
+            contadorMQTT++;
         }
     }
 }
