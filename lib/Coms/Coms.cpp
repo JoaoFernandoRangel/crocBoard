@@ -9,6 +9,48 @@ ComWiFi::ComWiFi(std::string SSID, std::string PWD)
 
     _mqtt.setClient(_WifiClient);
     _mqtt.setServer(_address.c_str(), _port);
+    _mqtt.setKeepAlive(300);
+    _mqtt.setCallback([this](const char *topic, byte *payload, unsigned int length) { this->callBackDownlink(topic, payload, length); });
+}
+
+void ComWiFi::callBackDownlink(const char *topic, byte *payload, unsigned int length){
+    String message;
+    for (unsigned int i = 0; i < length; i++) {
+        message += (char)payload[i];
+    }
+    Serial.print("Mensagem recebida [");
+    Serial.print(topic);
+    Serial.print("]: ");
+    Serial.println(message);
+    // Mensagem recebida [v1/devices/me/rpc/request/28]: {"method":"acc","params":false}
+    //  Parseie a mensagem JSON
+    StaticJsonDocument<200> doc;
+    DeserializationError error = deserializeJson(doc, message);
+    if (message.indexOf("acc1") > -1) {
+        _acc1 = doc["params"];
+    }
+    if (message.indexOf("tOn") > -1) {
+        _tOn = doc["params"];
+        sendData(!digitalRead(RelePin), _ntpClient.getFormattedTime(), _counter, _tOn);
+    }
+    if (message.indexOf("panic") > -1) {
+        _panic = doc["params"];
+    }
+}
+bool ComWiFi::sendData(uint8_t porta1, String timestamp, uint32_t contador, unsigned long TON) {
+    StaticJsonDocument<200> doc;
+    doc["porta1"] = porta1;  // distância
+    doc["timestamp"] = timestamp;
+    doc["contador"] = contador;
+    doc["tOn"] = TON;
+    char buffer[256];
+    size_t packetsize = serializeJson(doc, buffer);
+    if(this->publish(buffer, packetsize)){
+        Serial.println(buffer);
+        return true;
+    }else{
+        return false;
+    }
 }
 
 void ComWiFi::initNTP() {

@@ -4,13 +4,11 @@
 
 #include "conf.h"
 
-
 //Macros para thingsboard
 #define address "demo.thingsboard.io"
 #define mqttToken "C14W6ZGOQKxuKucdCFMj"
 #define port 1883
 #define topic_pub "v1/devices/me/telemetry"
-
 
 // Macros para NTP
 #define gmtOffset_sec___ -10800    // Offset GMT em segundos
@@ -31,8 +29,8 @@ class ComWiFi {
     WiFiUDP _ntpUdp;
     NTPClient _ntpClient;
 
-    unsigned long _tOn, _tOff;
-
+    unsigned long _tOn, _tOff, _acc1, _panic;
+    uint32_t _counter;
    public:
     ComWiFi(std::string SSID, std::string PWD);
     bool initWiFi();
@@ -40,5 +38,7 @@ class ComWiFi {
     void initNTP();
     String getTime();
     bool publish(String topic, String msg, size_t msgSize_t);
+    bool sendData(uint8_t porta1, String timestamp, uint32_t contador, unsigned long TON);
     bool publish(String msg, size_t msgSize_t);
+    void callBackDownlink(const char *topic, byte *payload, unsigned int length);
 };
