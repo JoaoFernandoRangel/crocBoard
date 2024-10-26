@@ -4,17 +4,17 @@
 
 #include "conf.h"
 
-//Macros para thingsboard
+// Macros para thingsboard
 #define address "demo.thingsboard.io"
 #define mqttToken "C14W6ZGOQKxuKucdCFMj"
 #define port 1883
 #define topic_pub "v1/devices/me/telemetry"
 
 // Macros para NTP
-#define gmtOffset_sec___ -10800    // Offset GMT em segundos
-#define daylightOffset_sec___ 60000    // Offset horario de verao
-#define ntpServer1 "pool.ntp.org"  // Servidor NTP 1
-#define ntpServer2 "a.st1.ntp.br"  // Servidor NTP 2
+#define gmtOffset_sec___ -10800      // Offset GMT em segundos
+#define daylightOffset_sec___ 60000  // Offset horario de verao
+#define ntpServer1 "pool.ntp.org"    // Servidor NTP 1
+#define ntpServer2 "a.st1.ntp.br"    // Servidor NTP 2
 
 class ComWiFi {
    private:
@@ -28,11 +28,15 @@ class ComWiFi {
     PubSubClient _mqtt;
     WiFiUDP _ntpUdp;
     NTPClient _ntpClient;
-
-    unsigned long _tOn, _tOff, _acc1, _panic;
+    bool _acc1;
+    unsigned long _tOn, _tOff, _panic, _tIdle;
     uint32_t _counter;
+
+    bool _updateFlag;
+
    public:
     ComWiFi(std::string SSID, std::string PWD);
+    void comsLoop();
     bool initWiFi();
     bool reconnectMQTT();
     void initNTP();
@@ -41,4 +45,8 @@ class ComWiFi {
     bool sendData(uint8_t porta1, String timestamp, uint32_t contador, unsigned long TON);
     bool publish(String msg, size_t msgSize_t);
     void callBackDownlink(const char *topic, byte *payload, unsigned int length);
+    bool getAcc1();
+    void raiseUpdateFlag();
+    void lowerUpdateFlag();
+    bool getUpdateFlag();
 };

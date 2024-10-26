@@ -6,14 +6,42 @@ ComWiFi::ComWiFi(std::string SSID, std::string PWD)
     _pwd = PWD;
     _address = address;
     _port = port;
-
     _mqtt.setClient(_WifiClient);
     _mqtt.setServer(_address.c_str(), _port);
     _mqtt.setKeepAlive(300);
     _mqtt.setCallback([this](const char *topic, byte *payload, unsigned int length) { this->callBackDownlink(topic, payload, length); });
 }
 
-void ComWiFi::callBackDownlink(const char *topic, byte *payload, unsigned int length){
+bool ComWiFi::getAcc1() { return _acc1; }
+bool ComWiFi::getUpdateFlag() { return _updateFlag; }
+
+void ComWiFi::raiseUpdateFlag() { _updateFlag = true; }
+void ComWiFi::lowerUpdateFlag() { _updateFlag = false; }
+
+void ComWiFi::comsLoop() {
+    if (WiFi.status() == WL_CONNECTED) {
+        WiFiLed(HIGH);
+        if (_mqtt.connected()) {
+            _mqtt.loop();
+            if (millis() - _tIdle > retornaSegundo(30)) {
+                if (sendData(!digitalRead(RelePin), _ntpClient.getFormattedTime(), _counter, _tOn)) {
+                    _counter++;
+                } else {
+                    _counter = 0;
+                }
+                _tIdle = millis();
+            }
+        } else {
+            this->reconnectMQTT();
+        }
+    } else {
+        WiFiLed(false);
+        WiFi.disconnect();
+        this->initWiFi();
+    }
+}
+
+void ComWiFi::callBackDownlink(const char *topic, byte *payload, unsigned int length) {
     String message;
     for (unsigned int i = 0; i < length; i++) {
         message += (char)payload[i];
@@ -37,18 +65,19 @@ void ComWiFi::callBackDownlink(const char *topic, byte *payload, unsigned int le
         _panic = doc["params"];
     }
 }
+
 bool ComWiFi::sendData(uint8_t porta1, String timestamp, uint32_t contador, unsigned long TON) {
     StaticJsonDocument<200> doc;
-    doc["porta1"] = porta1;  // distância
+    doc["porta1"] = porta1;
     doc["timestamp"] = timestamp;
     doc["contador"] = contador;
     doc["tOn"] = TON;
     char buffer[256];
     size_t packetsize = serializeJson(doc, buffer);
-    if(this->publish(buffer, packetsize)){
+    if (this->publish(buffer, packetsize)) {
         Serial.println(buffer);
         return true;
-    }else{
+    } else {
         return false;
     }
 }
@@ -58,20 +87,16 @@ void ComWiFi::initNTP() {
     _ntpClient.update();
 }
 
-String ComWiFi::getTime(){
+String ComWiFi::getTime() {
     _ntpClient.update();
     return _ntpClient.getFormattedTime();
 }
 
-bool ComWiFi::publish(String topic, String msg, size_t msgSize_t){
-    return _mqtt.publish(topic.c_str(), msg.c_str(), msgSize_t);
-}
-bool ComWiFi::publish(String msg, size_t msgSize_t){
-    return _mqtt.publish(topic_pub, msg.c_str(), msgSize_t);
-}
+bool ComWiFi::publish(String topic, String msg, size_t msgSize_t) { return _mqtt.publish(topic.c_str(), msg.c_str(), msgSize_t); }
+bool ComWiFi::publish(String msg, size_t msgSize_t) { return _mqtt.publish(topic_pub, msg.c_str(), msgSize_t); }
 
-bool ComWiFi::reconnectMQTT(){
-        while (!_mqtt.connected() && _contadorMQTT < 15) {
+bool ComWiFi::reconnectMQTT() {
+    while (!_mqtt.connected() && _contadorMQTT < 15) {
         Serial.print("Tentando conectar ao MQTT...");
         if (_mqtt.connect("ESP32Client", mqttToken, NULL)) {
             Serial.println("Conectado");
@@ -87,8 +112,6 @@ bool ComWiFi::reconnectMQTT(){
     }
 }
 
-
-
 bool ComWiFi::initWiFi() {
     vTaskDelay(pdMS_TO_TICKS(10));
     Serial.println();
@@ -100,7 +123,7 @@ bool ComWiFi::initWiFi() {
         Serial.print(".");
         _contadorWifi++;
     }
-    if(WiFi.status() == WL_CONNECTED){
+    if (WiFi.status() == WL_CONNECTED) {
         return true;
     }
     unsigned long t1, t2, agoraw;
