@@ -1,19 +1,13 @@
 #include <ArduinoJson.h>  // Inclua a biblioteca ArduinoJson
-#include <NTPClient.h>
-#include <PubSubClient.h>
-#include <Update.h>
-#include <WiFi.h>
+#include "conf.h"
+#include "Coms.h"
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 WiFiUDP _ntpUDP;
 NTPClient _timeClient(_ntpUDP, "pool.ntp.org", -10800);
 
-#define retornaSegundo(x) (1000 * (x))
-#define retornaMinuto(x) (60 * 1000 * (x))
-#define retornaHora(x) (60 * 60 * 1000 * (x))
-#define RelePin 27
-#define WiFi_LED 19
+
 unsigned long tOn = 15, tOff = 4;
 unsigned long flagT, t0;
 bool ligado = false;
