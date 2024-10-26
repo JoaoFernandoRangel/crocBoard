@@ -8,7 +8,8 @@
 #include <ctime>
 #include <ArduinoJson.h>
 
-
+// Macros para Led
+#define WiFiLed(x) digitalWrite(WiFi_LED,(x))
 
 // Macros de controle
 #define retornaSegundo(x) (1000 * (x))
