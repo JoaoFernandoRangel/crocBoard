@@ -6,7 +6,6 @@
 #include "string.h"
 #include "time.h"
 #include <ctime>
-#include <ArduinoJson.h>
 
 // Macros para Led
 #define WiFiLed(x) digitalWrite(WiFi_LED,(x))
