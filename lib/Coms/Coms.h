@@ -39,6 +39,7 @@ class ComWiFi {
     ComWiFi(std::string SSID, std::string PWD);
     void comsLoop();
     bool initWiFi();
+    bool updateServer();
     bool reconnectMQTT();
     void initNTP();
     String getTime();
@@ -47,7 +48,10 @@ class ComWiFi {
     bool publish(String msg, size_t msgSize_t);
     void callBackDownlink(const char *topic, byte *payload, unsigned int length);
     bool getAcc1();
+    void setAcc1(uint8_t);
     void raiseUpdateFlag();
     void lowerUpdateFlag();
     bool getUpdateFlag();
+    unsigned long getTon();
+    unsigned long getToff();
 };

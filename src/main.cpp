@@ -3,18 +3,15 @@
 #include "Coms.h"
 #include "conf.h"
 
-WiFiClient espClient;
-PubSubClient client(espClient);
-WiFiUDP _ntpUDP;
-NTPClient _timeClient(_ntpUDP, "pool.ntp.org", -10800);
-
-unsigned long tOn = 15, tOff = 4;
-unsigned long flagT, t0;
-bool ligado = false;
-
-// Configurações WiFi
 const char *ssid = "Bia 2";
 const char *password = "coisafacil";
+
+#define SSID "Bia 2"
+#define PWD "coisafacil"
+
+ComWiFi coms(SSID, PWD);
+
+// Configurações WiFi
 // const char *ssid = "S23";
 // const char *password = "bemvindo";
 
@@ -40,13 +37,8 @@ void setup() {
     pinMode(RelePin, OUTPUT);
     pinMode(WiFi_LED, OUTPUT);
     digitalWrite(RelePin, HIGH);
-    // Daqui para baixo interno a Coms
-    setup_wifi();
-    _timeClient.begin();
-    _timeClient.update();
-    client.setServer(mqtt_server, 1883);
-    client.setCallback(callback);
-    // Daqui para cima iterno a Coms
+    coms.initWiFi();
+    coms.reconnectMQTT();
     xTaskCreatePinnedToCore(thingsBoardTask, "thingsBoardTask", 10000, NULL, 1, NULL, 1);  // Executa no núcleo APP (Core 1)
     xTaskCreatePinnedToCore(autoOpTask, "autoOpTask", 10000, NULL, 1, NULL, 0);            // Executa no núcleo PRO (Core 0)
 }
@@ -55,6 +47,7 @@ void loop() {
     vTaskSuspend(NULL);  // O loop original está vazio pois a task loopTask está rodando no Core 1
 }
 
+unsigned long t0;
 uint8_t digitalReadOld;
 // Task que executa o conteúdo original do loop() no núcleo APP (Core 1)
 
@@ -63,33 +56,13 @@ uint8_t digitalReadOld;
 void thingsBoardTask(void *pvParameters) {
     digitalReadOld = digitalRead(RelePin);
     while (true) {
-        if (WiFi.status() == WL_CONNECTED) {  // Se conectado na WiFi
-            digitalWrite(WiFi_LED, HIGH);     // Acende Led WiFi
-            if (client.connected()) {         // Se conectado no broker
-                client.loop();
-                if (millis() - t > retornaSegundo(30)) {
-                    if (sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn)) {
-                        cont++;
-                        _timeClient.update();
-                    } else {
-                        cont = 1;
-                    }
-                    t = millis();
-                }
-            } else {
-                reconnectMQTT(contadorMQTT);
-            }
-        } else {
-            digitalWrite(WiFi_LED, LOW);  // Acende Led WiFi
-            WiFi.disconnect();
-            setup_wifi();
-        }
-        if (acc1) {
-            digitalWrite(RelePin, !acc1);  // Liga o relé
+        coms.comsLoop();
+        if (coms.getAcc1()) {
+            digitalWrite(RelePin, !coms.getAcc1());  // Liga o relé
             // if (millis() - t0 > retornaSegundo(tOn))
-            if (millis() - t0 > retornaMinuto(tOn)) {
-                acc1 = false;
-                digitalWrite(RelePin, !acc1);  // Desliga o relé
+            if (millis() - t0 > retornaMinuto(coms.getTon())) {
+                coms.setAcc1(false);
+                digitalWrite(RelePin, !coms.getAcc1());  // Desliga o relé
                 t0 = millis();
             }
         } else {
@@ -97,10 +70,10 @@ void thingsBoardTask(void *pvParameters) {
             t0 = millis();
         }
         if (panic) {
-            acc1 = false;                  // para o timer
+            coms.setAcc1(false);  // para o timer
         }
         if (digitalReadOld != digitalRead(RelePin)) {  // Se houve mudança de estado envia para o servidor
-            sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn);
+            coms.updateServer();
             digitalReadOld = digitalRead(RelePin);
         }
         vTaskDelay(10 / portTICK_PERIOD_MS);  // Pequeno delay para não ocupar 100% da CPU
@@ -115,8 +88,8 @@ void autoOpTask(void *pvParameters) {
         agora = millis();
         // Se a bomba está desligada e o tempo toff passou
         // if (!flag && (agora - antes0 >= retornaSegundo(30))){
-        if (!flag && (agora - antes0 >= retornaHora(tOff))) {
-            Serial.printf("Passou %d minuto\n", tOff);
+        if (!flag && (agora - antes0 >= retornaHora(coms.getToff()))) {
+            Serial.printf("Passou %d minuto\n", coms.getToff());
             Serial.printf("Bomba Ligada\n");
             antes0 = agora;  // Atualiza o tempo de referência para o próximo acionamento
             antes1 = agora;  // Atualiza o tempo de referência para o próximo acionamento
@@ -125,8 +98,8 @@ void autoOpTask(void *pvParameters) {
         }
         // Se a bomba está ligada e o tempo ton passou
         // else if (flag && (agora - antes1 >= retornaSegundo(tOn)))
-        else if (flag && (agora - antes1 >= retornaMinuto(tOn))) {
-            Serial.printf("Passou %d segundos\n", tOn);
+        else if (flag && (agora - antes1 >= retornaMinuto(coms.getTon()))) {
+            Serial.printf("Passou %d segundos\n", coms.getTon());
             Serial.printf("Bomba Desligada\n");
             antes1 = agora;  // Atualiza o tempo de referência para o próximo desligamento
             digitalWrite(RelePin, true);
@@ -136,104 +109,3 @@ void autoOpTask(void *pvParameters) {
     }
 }
 
-// TODO - trocar por função de busca em JSON
-void setup_wifi() {
-    delay(10);
-    Serial.println();
-    Serial.print("Conectando a ");
-    Serial.println(ssid);
-    WiFi.begin(ssid, password);
-    while (WiFi.status() != WL_CONNECTED && contadorWiFi <= 10) {
-        delay(500);
-        Serial.print(".");
-        contadorWiFi++;
-    }
-    unsigned long t1, t2, agoraw;
-    if (contadorWiFi >= 10) {
-        t1 = millis();
-        t2 = millis();
-        while (true) {
-            agoraw = millis();
-            // if (agoraw - t1 > retornaHora(1)) {
-            if (agoraw - t1 > retornaMinuto(1)) {
-                break;
-            }
-            if (agoraw - t2 > 500) {
-                digitalWrite(WiFi_LED, !digitalRead(WiFi_LED));
-                t2 = millis();
-            }
-        }
-    } else {
-        contadorWiFi = 0;
-    }
-    Serial.println("");
-    Serial.println("WiFi conectado");
-    Serial.println("Endereço IP: ");
-    Serial.println(WiFi.localIP());
-}
-
-// Done
-void callback(char *topic, byte *payload, unsigned int length) {
-    /*
-    Mensagem recebida [v1/devices/me/rpc/request/25]: {"method":"slider2","params":80}
-    Mensagem recebida [v1/devices/me/rpc/request/26]: {"method":"slider1","params":60}
-    */
-
-    // Converta o payload para uma string
-    String message;
-    for (unsigned int i = 0; i < length; i++) {
-        message += (char)payload[i];
-    }
-    Serial.print("Mensagem recebida [");
-    Serial.print(topic);
-    Serial.print("]: ");
-    Serial.println(message);
-    // Mensagem recebida [v1/devices/me/rpc/request/28]: {"method":"acc","params":false}
-    //  Parseie a mensagem JSON
-    StaticJsonDocument<200> doc;
-    DeserializationError error = deserializeJson(doc, message);
-    if (message.indexOf("acc1") > -1) {
-        acc1 = doc["params"];
-    }
-    if (message.indexOf("tOn") > -1) {
-        tOn = doc["params"];
-        sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn);
-    }
-    if (message.indexOf("panic") > -1) {
-        panic = doc["params"];
-    }
-}
-
-// Done
-void reconnectMQTT(uint8_t &contadorMQTT) {
-    while (!client.connected() && contadorMQTT < 15) {
-        Serial.print("Tentando conectar ao MQTT...");
-        if (client.connect("ESP32Client", mqtt_token, NULL)) {
-            Serial.println("Conectado");
-            client.subscribe("v1/devices/me/rpc/request/+");
-            contadorMQTT = 0;
-        } else {
-            Serial.print("falhou, rc=");
-            Serial.print(client.state());
-            Serial.println(" tente novamente em 5 segundos");
-            delay(5000);
-            contadorMQTT++;
-        }
-    }
-}
-// Done
-bool sendData(uint8_t porta1, String timestamp, uint8_t contador, unsigned long TON) {
-    StaticJsonDocument<200> doc;
-    doc["porta1"] = porta1;  // distância
-    doc["timestamp"] = timestamp;
-    doc["contador"] = contador;
-    doc["tOn"] = TON;
-    char buffer[256];
-    size_t packetsize = serializeJson(doc, buffer);
-    if (client.publish("v1/devices/me/telemetry", buffer, packetsize)) {
-        Serial.println(buffer);
-        return true;
-    } else {
-        return false;
-    }
-}

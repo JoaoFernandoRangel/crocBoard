@@ -13,28 +13,28 @@ ComWiFi::ComWiFi(std::string SSID, std::string PWD)
 }
 
 bool ComWiFi::getAcc1() { return _acc1; }
+void ComWiFi::setAcc1(uint8_t a) { _acc1 = a; }
 bool ComWiFi::getUpdateFlag() { return _updateFlag; }
 
 void ComWiFi::raiseUpdateFlag() { _updateFlag = true; }
 void ComWiFi::lowerUpdateFlag() { _updateFlag = false; }
 
 void ComWiFi::comsLoop() {
-    if(WiFi.status() != WL_CONNECTED){
-    
+    if (WiFi.status() != WL_CONNECTED) {
         WiFiLed(false);
         WiFi.disconnect();
         this->initWiFi();
-        //Debug reconexão
-        return; 
+        // Debug reconexão
+        return;
     }
-    if(!_mqtt.connected()){
+    if (!_mqtt.connected()) {
         reconnectMQTT();
         return;
     }
-    if(millis() -_tIdle > retornaSegundo(30)){
-        if(sendData(!digitalRead(RelePin), _ntpClient.getFormattedTime(), _counter, _tOn)){
-            _counter ++;
-        }else{
+    if (millis() - _tIdle > retornaSegundo(30)) {
+        if (sendData(!digitalRead(RelePin), _ntpClient.getFormattedTime(), _counter, _tOn)) {
+            _counter++;
+        } else {
             _counter = 0;
         }
         _tIdle = millis();
@@ -81,6 +81,23 @@ bool ComWiFi::sendData(uint8_t porta1, String timestamp, uint32_t contador, unsi
         return false;
     }
 }
+bool ComWiFi::updateServer() {
+    StaticJsonDocument<200> doc;
+    doc["porta1"] = !digitalRead(RelePin);
+    doc["timestamp"] = this->getTime();
+    doc["contador"] = _counter;
+    doc["tOn"] = _tOn;
+    char buffer[256];
+    size_t packetsize = serializeJson(doc, buffer);
+    if (this->publish(buffer, packetsize)) {
+        Serial.println(buffer);
+        return true;
+    } else {
+        return false;
+    }
+}
+unsigned long ComWiFi::getTon(){return _tOn;}
+unsigned long ComWiFi::getToff(){return _tOff;}
 
 void ComWiFi::initNTP() {
     _ntpClient.begin();
@@ -124,6 +141,7 @@ bool ComWiFi::initWiFi() {
         _contadorWifi++;
     }
     if (WiFi.status() == WL_CONNECTED) {
+        this->initNTP();
         return true;
     }
     unsigned long t1, t2, agoraw;
