@@ -19,25 +19,25 @@ void ComWiFi::raiseUpdateFlag() { _updateFlag = true; }
 void ComWiFi::lowerUpdateFlag() { _updateFlag = false; }
 
 void ComWiFi::comsLoop() {
-    if (WiFi.status() == WL_CONNECTED) {
-        WiFiLed(HIGH);
-        if (_mqtt.connected()) {
-            _mqtt.loop();
-            if (millis() - _tIdle > retornaSegundo(30)) {
-                if (sendData(!digitalRead(RelePin), _ntpClient.getFormattedTime(), _counter, _tOn)) {
-                    _counter++;
-                } else {
-                    _counter = 0;
-                }
-                _tIdle = millis();
-            }
-        } else {
-            this->reconnectMQTT();
-        }
-    } else {
+    if(WiFi.status() != WL_CONNECTED){
+    
         WiFiLed(false);
         WiFi.disconnect();
         this->initWiFi();
+        //Debug reconexão
+        return; 
+    }
+    if(!_mqtt.connected()){
+        reconnectMQTT();
+        return;
+    }
+    if(millis() -_tIdle > retornaSegundo(30)){
+        if(sendData(!digitalRead(RelePin), _ntpClient.getFormattedTime(), _counter, _tOn)){
+            _counter ++;
+        }else{
+            _counter = 0;
+        }
+        _tIdle = millis();
     }
 }
 

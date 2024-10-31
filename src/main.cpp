@@ -1,12 +1,12 @@
 #include <ArduinoJson.h>  // Inclua a biblioteca ArduinoJson
-#include "conf.h"
+
 #include "Coms.h"
+#include "conf.h"
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 WiFiUDP _ntpUDP;
 NTPClient _timeClient(_ntpUDP, "pool.ntp.org", -10800);
-
 
 unsigned long tOn = 15, tOff = 4;
 unsigned long flagT, t0;
@@ -40,7 +40,7 @@ void setup() {
     pinMode(RelePin, OUTPUT);
     pinMode(WiFi_LED, OUTPUT);
     digitalWrite(RelePin, HIGH);
-    //Daqui para baixo interno a Coms
+    // Daqui para baixo interno a Coms
     setup_wifi();
     _timeClient.begin();
     _timeClient.update();
@@ -58,8 +58,8 @@ void loop() {
 uint8_t digitalReadOld;
 // Task que executa o conteúdo original do loop() no núcleo APP (Core 1)
 
-//Imbutir etapas de verificação dentro de Coms
-//Implementar o transito de dados entre tasks
+// Imbutir etapas de verificação dentro de Coms
+// Implementar o transito de dados entre tasks
 void thingsBoardTask(void *pvParameters) {
     digitalReadOld = digitalRead(RelePin);
     while (true) {
@@ -93,10 +93,10 @@ void thingsBoardTask(void *pvParameters) {
                 t0 = millis();
             }
         } else {
+            digitalWrite(RelePin, !acc1);  // Desliga o relé
             t0 = millis();
         }
         if (panic) {
-            digitalWrite(RelePin, panic);  // desliga o relé
             acc1 = false;                  // para o timer
         }
         if (digitalReadOld != digitalRead(RelePin)) {  // Se houve mudança de estado envia para o servidor
@@ -107,10 +107,9 @@ void thingsBoardTask(void *pvParameters) {
     }
 }
 
-
 // Task que executa a função autoOp no núcleo PRO (Core 0)
-//Mudar para buscar os valores de operação automática na classe de wifi. 
-//Implementar semáforos para busca de dados quando houver mudança.
+// Mudar para buscar os valores de operação automática na classe de wifi.
+// Implementar semáforos para busca de dados quando houver mudança.
 void autoOpTask(void *pvParameters) {
     while (true) {
         agora = millis();
@@ -173,7 +172,7 @@ void setup_wifi() {
     Serial.println(WiFi.localIP());
 }
 
-//Done
+// Done
 void callback(char *topic, byte *payload, unsigned int length) {
     /*
     Mensagem recebida [v1/devices/me/rpc/request/25]: {"method":"slider2","params":80}
@@ -205,7 +204,7 @@ void callback(char *topic, byte *payload, unsigned int length) {
     }
 }
 
-//Done
+// Done
 void reconnectMQTT(uint8_t &contadorMQTT) {
     while (!client.connected() && contadorMQTT < 15) {
         Serial.print("Tentando conectar ao MQTT...");
@@ -222,7 +221,7 @@ void reconnectMQTT(uint8_t &contadorMQTT) {
         }
     }
 }
-//Done
+// Done
 bool sendData(uint8_t porta1, String timestamp, uint8_t contador, unsigned long TON) {
     StaticJsonDocument<200> doc;
     doc["porta1"] = porta1;  // distância
