@@ -34,6 +34,8 @@ const char *password = "coisafacil";
 // Configurações do ThingsBoard
 const char *mqtt_server = "demo.thingsboard.io";
 const char *mqtt_token = "C14W6ZGOQKxuKucdCFMj";
+// const char *mqtt_token = "nvyrYVfkx4D99FG7fSIz"; // Token para ESP Galinheiro
+
 
 // Variáveis de Controle
 unsigned long t;
