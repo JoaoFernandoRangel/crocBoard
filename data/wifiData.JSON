@@ -1,0 +1,36 @@
+{
+  "networks": [
+    {
+      "SSID": "SITIO_NEWNET",
+      "PWD": "coisafacil"
+    },
+    {
+      "SSID": "Bia 2",
+      "PWD": "coisafacil"
+    },
+    {
+      "SSID": "CS_TELECOM_CS96",
+      "PWD": "cs2017cs3337"
+    },
+    {
+      "SSID": "S23",
+      "PWD": "bemvindo"
+    },
+    {
+      "SSID": "REDE",
+      "PWD": "12345678a"
+    },
+    {
+      "SSID": "VIVOFIBRA-09D8",
+      "PWD": "816329FCDE"
+    },
+    {
+      "SSID": "VIVOFIBRA-DB00",
+      "PWD": "55228E47BB"
+    },
+    {
+      "SSID": "Escritorio",
+      "PWD": "cs2017cs3337"
+    }
+  ]
+}

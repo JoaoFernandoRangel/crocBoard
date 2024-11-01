@@ -4,6 +4,9 @@
 #include <Update.h>
 #include <WiFi.h>
 
+#include "cJSON.h"
+#include "myFS.h"
+
 WiFiClient espClient;
 PubSubClient client(espClient);
 WiFiUDP _ntpUDP;
@@ -14,6 +17,10 @@ NTPClient _timeClient(_ntpUDP, "pool.ntp.org", -10800);
 #define retornaHora(x) (60 * 60 * 1000 * (x))
 #define RelePin 27
 #define WiFi_LED 19
+#define MAX_ATTEMPTS 10
+// Arquivos de configuração
+#define RedeData "/wifiData.JSON"
+
 unsigned long tOn = 15, tOff = 4;
 unsigned long flagT, t0;
 bool ligado = false;
@@ -40,13 +47,20 @@ void callback(char *topic, byte *payload, unsigned int length);
 void setup_wifi();
 void thingsBoardTask(void *pvParameters);
 void autoOpTask(void *pvParameters);
+void getWifiData(bool serial, int index);
+bool connectToWifi();
 
 void setup() {
     Serial.begin(9600);
     pinMode(RelePin, OUTPUT);
     pinMode(WiFi_LED, OUTPUT);
     digitalWrite(RelePin, HIGH);
-    setup_wifi();
+    if (!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)) {
+        Serial.println("LittleFS Mount Failed");
+        return;
+    }
+    // setup_wifi();
+    connectToWifi();
     _timeClient.begin();
     _timeClient.update();
     client.setServer(mqtt_server, 1883);
@@ -87,15 +101,15 @@ void thingsBoardTask(void *pvParameters) {
         }
         if (acc1) {
             digitalWrite(RelePin, !acc1);  // Liga o relé
-            // if (millis() - t0 > retornaSegundo(tOn)) {
-                if (millis() - t0 > retornaMinuto(tOn)) {
+                                           // if (millis() - t0 > retornaSegundo(tOn)) {
+            if (millis() - t0 > retornaMinuto(tOn)) {
                 acc1 = false;
                 digitalWrite(RelePin, !acc1);  // Desliga o relé
                 t0 = millis();
             }
         } else {
-            if(!autoOn){
-            digitalWrite(RelePin, !acc1);  // Desliga o relé
+            if (!autoOn) {
+                digitalWrite(RelePin, !acc1);  // Desliga o relé
             }
             t0 = millis();
         }
@@ -238,4 +252,88 @@ bool sendData(uint8_t porta1, String timestamp, uint8_t contador, unsigned long 
     } else {
         return false;
     }
+}
+bool connectToWifi() {
+    const char *jsonString = readFile(LittleFS, RedeData, false).c_str();
+    int networkCount = cJSON_GetArraySize(cJSON_GetObjectItemCaseSensitive(cJSON_Parse(jsonString), "networks"));
+    int maxAttemptsPerNetwork = MAX_ATTEMPTS;
+    WiFi.mode(WIFI_MODE_STA);
+    for (int i = 0; i < networkCount; i++) {
+        getWifiData(false, i);  // Carrega as credenciais da rede com o índice 'i'
+        int contador = 0;
+        WiFi.begin(ssid, password);
+        unsigned long startTime = millis();
+        while (WiFi.status() != WL_CONNECTED && contador <= maxAttemptsPerNetwork) {
+            Serial.print(".");
+            contador++;
+            vTaskDelay(pdMS_TO_TICKS(500));
+        }
+        if (WiFi.status() == WL_CONNECTED) {
+            Serial.println();
+            Serial.println("WiFi connected");
+            Serial.print("IP address: ");
+            Serial.println(WiFi.localIP());
+            return true;  // Conectado com sucesso
+        } else {
+            Serial.println();
+            Serial.println("Não foi possível conectar à WiFi, tentando próxima rede.");
+        }
+    }
+
+    // Se não conseguir se conectar a nenhuma rede, reinicia o dispositivo
+    Serial.println("Nenhuma rede disponível foi conectada. Reiniciando...");
+    // ESP.restart();
+    return false;  // Isso nunca será executado devido ao ESP.restart()
+}
+
+void getWifiData(bool serial, int index) {
+    // Parse o JSON
+    cJSON *file = cJSON_Parse(readFile(LittleFS, RedeData, false).c_str());
+    if (file == NULL) {
+        Serial.println("Erro ao parsear JSON!");
+        return;
+    }
+
+    // Obtenha o vetor de redes
+    cJSON *networks = cJSON_GetObjectItemCaseSensitive(file, "networks");
+    if (!cJSON_IsArray(networks)) {
+        Serial.println("O JSON não contém um vetor 'networks' válido!");
+        cJSON_Delete(file);
+        return;
+    }
+
+    // Obtenha o objeto de rede no índice fornecido
+    cJSON *network = cJSON_GetArrayItem(networks, index);
+    if (network == NULL) {
+        Serial.println("Índice de rede fora do intervalo!");
+        cJSON_Delete(file);
+        return;
+    }
+
+    // Obtenha os campos SSID e PWD
+    cJSON *SSID = cJSON_GetObjectItemCaseSensitive(network, "SSID");
+    cJSON *PWD = cJSON_GetObjectItemCaseSensitive(network, "PWD");
+
+    if (cJSON_IsString(SSID) && (SSID->valuestring != NULL)) {
+        ssid = SSID->valuestring;
+    } else {
+        Serial.println("SSID inválido!");
+    }
+
+    if (cJSON_IsString(PWD) && (PWD->valuestring != NULL)) {
+        password = PWD->valuestring;
+    } else {
+        Serial.println("PWD inválido!");
+    }
+
+    // Debugging output
+    if (serial) {
+        Serial.print("SSID:");
+        Serial.print(ssid);
+        Serial.print("|| PWD:");
+        Serial.println(password);
+    }
+
+    // Libere a memória
+    cJSON_Delete(file);
 }
