@@ -15,7 +15,7 @@ NTPClient _timeClient(_ntpUDP, "pool.ntp.org", -10800);
 #define retornaSegundo(x) (1000 * (x))
 #define retornaMinuto(x) (60 * 1000 * (x))
 #define retornaHora(x) (60 * 60 * 1000 * (x))
-#define RelePin 27
+#define RelePin 13
 #define WiFi_LED 19
 #define MAX_ATTEMPTS 10
 // Arquivos de configuração
@@ -33,8 +33,8 @@ const char *password = "coisafacil";
 
 // Configurações do ThingsBoard
 const char *mqtt_server = "demo.thingsboard.io";
-const char *mqtt_token = "C14W6ZGOQKxuKucdCFMj";
-// const char *mqtt_token = "nvyrYVfkx4D99FG7fSIz"; // Token para ESP Galinheiro
+#define BombaCaju "C14W6ZGOQKxuKucdCFMj"
+#define BombaGalinheiro "nvyrYVfkx4D99FG7fSIz"
 
 
 // Variáveis de Controle
@@ -226,7 +226,7 @@ void callback(char *topic, byte *payload, unsigned int length) {
 void reconnectMQTT(uint8_t &contadorMQTT) {
     while (!client.connected() && contadorMQTT < 15) {
         Serial.print("Tentando conectar ao MQTT...");
-        if (client.connect("ESP32Client", mqtt_token, NULL)) {
+        if (client.connect("ESP32Client", BombaCaju, NULL)) {
             Serial.println("Conectado");
             client.subscribe("v1/devices/me/rpc/request/+");
             contadorMQTT = 0;
