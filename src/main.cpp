@@ -51,7 +51,7 @@ void getWifiData(bool serial, int index);
 bool connectToWifi();
 
 void setup() {
-    Serial.begin(9600);
+    Serial.begin(115200);
     pinMode(RelePin, OUTPUT);
     pinMode(WiFi_LED, OUTPUT);
     digitalWrite(RelePin, HIGH);
@@ -226,13 +226,18 @@ bool sendData(uint8_t porta1, String timestamp, uint8_t contador, unsigned long 
 }
 bool connectToWifi() {
     const char *jsonString = readFile(LittleFS, RedeData, false).c_str();
-    int networkCount = cJSON_GetArraySize(cJSON_GetObjectItemCaseSensitive(cJSON_Parse(jsonString), "networks"));
+    delay(2000);
+    Serial.println("jsonString:");
+    Serial.println(jsonString);
+    // int networkCount = cJSON_GetArraySize(cJSON_GetObjectItemCaseSensitive(cJSON_Parse(jsonString), "networks"));
+    int networkCount = 7;
+    Serial.println(networkCount);
     int maxAttemptsPerNetwork = MAX_ATTEMPTS;
     WiFi.mode(WIFI_MODE_STA);
     bool notConnected = true;
     while (notConnected) {
         for (int i = 0; i < networkCount; i++) {
-            getWifiData(false, i);  // Carrega as credenciais da rede com o índice 'i'
+            getWifiData(true, i);  // Carrega as credenciais da rede com o índice 'i'
             int contador = 0;
             WiFi.begin(ssid, password);
             unsigned long startTime = millis();
@@ -257,7 +262,15 @@ bool connectToWifi() {
             }
         }
         // Se não conseguir se conectar a nenhuma rede, reinicia o dispositivo
+        int c=0;
         Serial.println("Nenhuma rede disponível foi conectada. Reiniciando após o acionamento automático.");
+        while(true){
+            c++;
+            if(c == 10){
+                ESP.restart();
+            }
+            delay(100);
+        }
         // ESP.restart();
     }
     return false;  // Isso nunca será executado devido ao ESP.restart()
