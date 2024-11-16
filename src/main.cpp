@@ -77,30 +77,32 @@ uint8_t digitalReadOld, autoOn;
 void thingsBoardTask(void *pvParameters) {
     digitalReadOld = digitalRead(RelePin);
     while (true) {
-        if (WiFi.status() == WL_CONNECTED) {  // Se conectado na WiFi
-            digitalWrite(WiFi_LED, HIGH);     // Acende Led WiFi
-            if (client.connected()) {         // Se conectado no broker
-                client.loop();
-                if (millis() - t > retornaSegundo(30)) {
-                    if (sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn)) {
-                        cont++;
-                        _timeClient.update();
-                    } else {
-                        cont = 1;
-                    }
-                    t = millis();
-                }
-            } else {
-                reconnectMQTT(contadorMQTT);
-            }
-        } else {
-            digitalWrite(WiFi_LED, LOW);  // Acende Led WiFi
-            WiFi.disconnect();
+        if (WiFi.status() != WL_CONNECTED) {
             connectToWifi();
+            digitalWrite(WiFi_LED, LOW);  // Acende Led WiFi
+        } else {
+            digitalWrite(WiFi_LED, HIGH);  // Acende Led WiFi
         }
+        if (!client.connected()) {
+            client.setServer(mqtt_server, 1883);
+            client.setCallback(callback);
+            reconnectMQTT(contadorMQTT);
+        } else {
+            client.loop();
+            _timeClient.update();
+            if (millis() - t > retornaSegundo(30)) {
+                if (sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn)) {
+                    cont++;
+                    _timeClient.update();
+                } else {
+                    cont = 1;
+                }
+                t = millis();
+            }
+        }
+        vTaskDelay(10 / portTICK_PERIOD_MS);  // Pequeno delay para não ocupar 100% da CPU
         if (acc1) {
             digitalWrite(RelePin, !acc1);  // Liga o relé
-                                           // if (millis() - t0 > retornaSegundo(tOn)) {
             if (millis() - t0 > retornaMinuto(tOn)) {
                 acc1 = false;
                 digitalWrite(RelePin, !acc1);  // Desliga o relé
@@ -146,9 +148,6 @@ void autoOpTask(void *pvParameters) {
             Serial.printf("Bomba Desligada\n");
             antes1 = agora;  // Atualiza o tempo de referência para o próximo desligamento
             digitalWrite(RelePin, true);
-            if (religaWifi) {
-                ESP.restart();
-            }
             autoOn = false;
             flag = false;  // Desliga a bomba
         }
@@ -225,54 +224,71 @@ bool sendData(uint8_t porta1, String timestamp, uint8_t contador, unsigned long 
     }
 }
 bool connectToWifi() {
+    int maxAttemptsPerNetwork = MAX_ATTEMPTS;
+    bool notConnected = true;
     const char *jsonString = readFile(LittleFS, RedeData, false).c_str();
     delay(2000);
     Serial.println("jsonString:");
     Serial.println(jsonString);
-    // int networkCount = cJSON_GetArraySize(cJSON_GetObjectItemCaseSensitive(cJSON_Parse(jsonString), "networks"));
-    int networkCount = 7;
-    Serial.println(networkCount);
-    int maxAttemptsPerNetwork = MAX_ATTEMPTS;
-    WiFi.mode(WIFI_MODE_STA);
-    bool notConnected = true;
-    while (notConnected) {
-        for (int i = 0; i < networkCount; i++) {
-            getWifiData(true, i);  // Carrega as credenciais da rede com o índice 'i'
-            int contador = 0;
-            WiFi.begin(ssid, password);
-            unsigned long startTime = millis();
-            while (WiFi.status() != WL_CONNECTED && contador <= maxAttemptsPerNetwork) {
-                Serial.print(".");
-                contador++;
-                vTaskDelay(pdMS_TO_TICKS(500));
-            }
-            if (WiFi.status() == WL_CONNECTED) {
-                Serial.println();
-                Serial.println("WiFi connected");
-                Serial.print("IP address: ");
-                Serial.println(WiFi.localIP());
-                religaWifi = false; 
-                notConnected = false;
-                return true;  // Conectado com sucesso
-            } else {
-                Serial.println();
-                Serial.println("Não foi possível conectar à WiFi, tentando próxima rede.");
-                notConnected = true;
-                religaWifi = true;
-            }
-        }
-        // Se não conseguir se conectar a nenhuma rede, reinicia o dispositivo
-        int c=0;
-        Serial.println("Nenhuma rede disponível foi conectada. Reiniciando após o acionamento automático.");
-        while(true){
-            c++;
-            if(c == 10){
-                ESP.restart();
-            }
-            delay(100);
-        }
-        // ESP.restart();
+    cJSON *json = cJSON_Parse(jsonString);
+    if (json == NULL) {
+        Serial.println("Erro ao analisar JSON.");
+        return;
     }
+    // Verifica se o campo 'networks' existe e é um array
+    cJSON *networks = cJSON_GetObjectItemCaseSensitive(json, "networks");
+    if (!cJSON_IsArray(networks)) {
+        Serial.println("Campo 'networks' não encontrado ou não é um array.");
+        cJSON_Delete(json);
+        return;
+    }
+    // Obtém o tamanho do array
+    int networkCount = cJSON_GetArraySize(networks);
+    Serial.print("networkCount: ");
+    Serial.println(networkCount);
+    WiFi.mode(WIFI_MODE_STA);
+    std::string ssid_str, pwd_str;
+    // Itera sobre as redes para garantir que os dados estejam corretos
+    for (int i = 0; i < networkCount; i++) {
+        int contador = 0;
+        cJSON *network = cJSON_GetArrayItem(networks, i);
+        if (cJSON_IsObject(network)) {
+            cJSON *ssid = cJSON_GetObjectItemCaseSensitive(network, "SSID");
+            cJSON *pwd = cJSON_GetObjectItemCaseSensitive(network, "PWD");
+
+            if (cJSON_IsString(ssid) && cJSON_IsString(pwd)) {
+                ssid_str = ssid->valuestring;  // Atribui o valor do JSON
+                pwd_str = pwd->valuestring;    // Atribui o valor do JSON
+
+                Serial.print("SSID: ");
+                Serial.println(ssid_str.c_str());
+                Serial.print("PWD: ");
+                Serial.println(pwd_str.c_str());
+
+                WiFi.begin(ssid_str.c_str(), pwd_str.c_str());
+                unsigned long startTime = millis();
+                while (WiFi.status() != WL_CONNECTED && contador <= maxAttemptsPerNetwork) {
+                    Serial.print(".");
+                    contador++;
+                    vTaskDelay(pdMS_TO_TICKS(500));
+                }
+                if (WiFi.status() == WL_CONNECTED) {
+                    Serial.println();
+                    Serial.println("WiFi connected");
+                    Serial.print("IP address: ");
+                    Serial.println(WiFi.localIP());
+                    notConnected = false;
+                    cJSON_Delete(json);
+                    return true;  // Conectado com sucesso
+                } else {
+                    Serial.println();
+                    Serial.println("Não foi possível conectar à WiFi, tentando próxima rede.");
+                    notConnected = true;
+                }
+            }
+        }
+    }
+    cJSON_Delete(json);
     return false;  // Isso nunca será executado devido ao ESP.restart()
 }
 
