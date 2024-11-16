@@ -95,16 +95,14 @@ void thingsBoardTask(void *pvParameters) {
                 t = millis();
             }
         }
-        
-        vTaskDelay(pdMS_TO_TICKS(10));  // Pequeno delay para não ocupar 100% da CPU
-        
+
         manageRelay();
 
         if (digitalReadOld != digitalRead(RelePin)) {  // Se houve mudança de estado envia para o servidor
             sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn);
             digitalReadOld = digitalRead(RelePin);
         }
-        vTaskDelay(10 / portTICK_PERIOD_MS);  // Pequeno delay para não ocupar 100% da CPU
+        vTaskDelay(pdMS_TO_TICKS(10));  // Pequeno delay para não ocupar 100% da CPU
     }
 }
 
@@ -133,7 +131,7 @@ void autoOpTask(void *pvParameters) {
             autoOn = false;
             flag = false;  // Desliga a bomba
         }
-        vTaskDelay(100 / portTICK_PERIOD_MS);  // Define a frequência de execução da autoOp
+        vTaskDelay(pdMS_TO_TICKS(100));  // Define a frequência de execução da autoOp
     }
 }
 void manageWiFi() {
