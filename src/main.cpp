@@ -247,6 +247,7 @@ bool connectToWifi() {
     Serial.println(jsonString);
     cJSON *json = cJSON_Parse(jsonString);
     if (json == NULL) {
+        
         Serial.println("Erro ao analisar JSON.");
         return;
     }
