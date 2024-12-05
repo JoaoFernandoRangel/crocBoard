@@ -5,21 +5,13 @@
 #include <WiFi.h>
 
 #include "cJSON.h"
+#include "conf.h"
 #include "myFS.h"
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 WiFiUDP _ntpUDP;
 NTPClient _timeClient(_ntpUDP, "pool.ntp.org", -10800);
-
-#define retornaSegundo(x) (1000 * (x))
-#define retornaMinuto(x) (60 * 1000 * (x))
-#define retornaHora(x) (60 * 60 * 1000 * (x))
-#define RelePin 13
-#define WiFi_LED 19
-#define MAX_ATTEMPTS 10
-// Arquivos de configuração
-#define RedeData "/wifiData.JSON"
 
 unsigned long tOn = 15, tOff = 4;
 unsigned long flagT, t0;
@@ -33,17 +25,14 @@ bool ligado = false;
 const char *ssid;
 const char *password;
 const char *mqtt_server = "demo.thingsboard.io";
-#define BombaCaju "C14W6ZGOQKxuKucdCFMj"
-#define BombaGalinheiro "nvyrYVfkx4D99FG7fSIz"
-#define BombaJardim "jojb3psqbghbwcw1todo"
 
 // Variáveis de Controle
 unsigned long t;
-uint8_t acc1, cont = 0, contadorWiFi = 0;
+uint8_t  cont = 0, contadorWiFi = 0;
 unsigned long agora, antes0, antes1;
-bool flag = false, panic = false, religaWifi;
+bool flag = false, panic = false, religaWifi, acc1 = false;
 
-bool sendData(uint8_t porta1, String timestamp, uint8_t contador, unsigned long TON);
+bool sendData(uint8_t porta1, String timestamp, uint8_t contador, unsigned long TON, bool invert);
 void reconnectMQTT();
 void callback(char *topic, byte *payload, unsigned int length);
 void thingsBoardTask(void *pvParameters);
@@ -87,7 +76,7 @@ void thingsBoardTask(void *pvParameters) {
             client.loop();
             _timeClient.update();
             if (millis() - t > retornaSegundo(30)) {
-                if (sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn)) {
+                if (sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn, false)) {
                     cont++;
                     _timeClient.update();
                 } else {
@@ -96,11 +85,9 @@ void thingsBoardTask(void *pvParameters) {
                 t = millis();
             }
         }
-
         manageRelay();
-
         if (digitalReadOld != digitalRead(RelePin)) {  // Se houve mudança de estado envia para o servidor
-            sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn);
+            sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn, false);
             digitalReadOld = digitalRead(RelePin);
         }
         vTaskDelay(pdMS_TO_TICKS(10));  // Pequeno delay para não ocupar 100% da CPU
@@ -112,7 +99,7 @@ void autoOpTask(void *pvParameters) {
     while (true) {
         agora = millis();
         // Se a bomba está desligada e o tempo toff passou
-        // if (!flag && (agora - antes0 >= retornaSegundo(30))){
+        // if (!flag && (agora - antes0 >= retornaSegundo(10))){
         if (!flag && (agora - antes0 >= retornaHora(tOff))) {
             Serial.printf("Passou %d minuto\n", tOff);
             Serial.printf("Bomba Ligada\n");
@@ -196,7 +183,7 @@ void callback(char *topic, byte *payload, unsigned int length) {
     }
     if (message.indexOf("tOn") > -1) {
         tOn = doc["params"];
-        sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn);
+        sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn, true);
     }
     if (message.indexOf("panic") > -1) {
         panic = doc["params"];
@@ -210,7 +197,7 @@ void reconnectMQTT() {
     int contadorMQTT = 0;
     while (!client.connected() && contadorMQTT < 15) {
         Serial.print("Tentando conectar ao MQTT...");
-        if (client.connect("ESP32Client", BombaGalinheiro, NULL)) {
+        if (client.connect("ESP32Client", BombaTarget, NULL)) {
             Serial.println("Conectado");
             client.subscribe("v1/devices/me/rpc/request/+");
             contadorMQTT = 0;
@@ -224,9 +211,13 @@ void reconnectMQTT() {
     }
 }
 
-bool sendData(uint8_t porta1, String timestamp, uint8_t contador, unsigned long TON) {
+bool sendData(uint8_t porta1, String timestamp, uint8_t contador, unsigned long TON, bool invert) {
     StaticJsonDocument<200> doc;
-    doc["porta1"] = porta1;  // distância
+    if (invert) {
+        doc["porta1"] = !porta1;  // distância
+    } else {
+        doc["porta1"] = porta1;  // distância
+    }
     doc["timestamp"] = timestamp;
     doc["contador"] = contador;
     doc["tOn"] = TON;
@@ -242,23 +233,20 @@ bool sendData(uint8_t porta1, String timestamp, uint8_t contador, unsigned long 
 bool connectToWifi() {
     int maxAttemptsPerNetwork = MAX_ATTEMPTS;
     bool notConnected = true;
-    const char *jsonString = readFile(LittleFS, RedeData, false).c_str();
+    String jsonString = readFile(LittleFS, RedeData, false);
     delay(2000);
     Serial.println("jsonString:");
     Serial.println(jsonString);
-    cJSON *json = cJSON_Parse(jsonString);
+    cJSON *json = cJSON_Parse(jsonString.c_str());
     if (json == NULL) {
-        
         Serial.println("Erro ao analisar JSON.");
-        
     }
     // Verifica se o campo 'networks' existe e é um array
     cJSON *networks = cJSON_GetObjectItemCaseSensitive(json, "networks");
-    if (!cJSON_IsArray(networks)) {
-        Serial.println("Campo 'networks' não encontrado ou não é um array.");
-        cJSON_Delete(json);
-        
-    }
+    // if (!cJSON_IsArray(networks)) {
+    //     Serial.println("Campo 'networks' não encontrado ou não é um array.");
+    //     cJSON_Delete(json);
+    // }
     // Obtém o tamanho do array
     int networkCount = cJSON_GetArraySize(networks);
     Serial.print("networkCount: ");
