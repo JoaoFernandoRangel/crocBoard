@@ -28,7 +28,7 @@ const char *mqtt_server = "demo.thingsboard.io";
 
 // Variáveis de Controle
 unsigned long t;
-uint8_t  cont = 0, contadorWiFi = 0;
+uint8_t cont = 0, contadorWiFi = 0;
 unsigned long agora, antes0, antes1;
 bool flag = false, panic = false, religaWifi, acc1 = false;
 
@@ -176,6 +176,33 @@ void callback(char *topic, byte *payload, unsigned int length) {
     Serial.println(message);
     // Mensagem recebida [v1/devices/me/rpc/request/28]: {"method":"acc","params":false}
     //  Parseie a mensagem JSON
+    cJSON *root = cJSON_Parse(message.c_str());
+    if (root == NULL) {
+        Serial.println("Erro ao parsear JSON!");
+        return;
+    }
+    cJSON *params = cJSON_GetObjectItemCaseSensitive(root, "params");
+    cJSON *method = cJSON_GetObjectItemCaseSensitive(root, "method");
+    std::string method_str = method->valuestring;
+    std::string keys[] = {"acc1", "tOn", "tOff", "panic", "restart"};
+    if (method_str == keys[0]) {  // acc1
+        acc1 = cJSON_IsTrue(params);
+    } else if (method_str == keys[1]) {  // tOn
+        tOn = cJSON_GetNumberValue(params);
+        sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn, true);
+    } else if (method_str == keys[2]) {  // tOff
+        double temp = cJSON_GetNumberValue(params);
+        tOff = static_cast<unsigned long>(temp);
+    } else if (method_str == keys[3]) {  // panic
+        panic = cJSON_IsTrue(params);
+    } else if (method_str == keys[4]) {  // restart
+        ESP.restart();
+    }
+    /*
+    {
+    "method": "acc1",
+    "params": true
+    }
     StaticJsonDocument<200> doc;
     DeserializationError error = deserializeJson(doc, message);
     if (message.indexOf("acc1") > -1) {
@@ -185,7 +212,7 @@ void callback(char *topic, byte *payload, unsigned int length) {
         tOn = doc["params"];
         sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn, true);
     }
-    if(message.indexOf("tOff") > -1){
+    if (message.indexOf("tOff") > -1) {
         tOff = doc["params"];
     }
     if (message.indexOf("panic") > -1) {
@@ -194,6 +221,7 @@ void callback(char *topic, byte *payload, unsigned int length) {
     if (message.indexOf("restart") > -1) {
         ESP.restart();
     }
+    */
 }
 
 void reconnectMQTT() {
