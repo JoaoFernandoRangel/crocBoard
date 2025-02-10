@@ -59,7 +59,7 @@ void loop() {
     vTaskSuspend(NULL);  // O loop original está vazio pois a task loopTask está rodando no Core 1
 }
 
-uint8_t digitalReadOld;
+uint8_t digitalReadOld, autoOn;
 // Task que executa o conteúdo original do loop() no núcleo APP (Core 1)
 void thingsBoardTask(void *pvParameters) {
     digitalReadOld = digitalRead(RelePin);
@@ -87,13 +87,16 @@ void thingsBoardTask(void *pvParameters) {
         }
         if (acc1) {
             digitalWrite(RelePin, !acc1);  // Liga o relé
-            // if (millis() - t0 > retornaSegundo(tOn))
-            if (millis() - t0 > retornaMinuto(tOn)) {
+            // if (millis() - t0 > retornaSegundo(tOn)) {
+                if (millis() - t0 > retornaMinuto(tOn)) {
                 acc1 = false;
                 digitalWrite(RelePin, !acc1);  // Desliga o relé
                 t0 = millis();
             }
         } else {
+            if(!autoOn){
+            digitalWrite(RelePin, !acc1);  // Desliga o relé
+            }
             t0 = millis();
         }
         if (panic) {
@@ -120,15 +123,17 @@ void autoOpTask(void *pvParameters) {
             antes0 = agora;  // Atualiza o tempo de referência para o próximo acionamento
             antes1 = agora;  // Atualiza o tempo de referência para o próximo acionamento
             digitalWrite(RelePin, false);
+            autoOn = true;
             flag = true;  // Liga a bomba
         }
         // Se a bomba está ligada e o tempo ton passou
-        // else if (flag && (agora - antes1 >= retornaSegundo(tOn)))
+        // else if (flag && (agora - antes1 >= retornaSegundo(5))){
         else if (flag && (agora - antes1 >= retornaMinuto(tOn))) {
             Serial.printf("Passou %d segundos\n", tOn);
             Serial.printf("Bomba Desligada\n");
             antes1 = agora;  // Atualiza o tempo de referência para o próximo desligamento
             digitalWrite(RelePin, true);
+            autoOn = false;
             flag = false;  // Desliga a bomba
         }
         vTaskDelay(100 / portTICK_PERIOD_MS);  // Define a frequência de execução da autoOp
