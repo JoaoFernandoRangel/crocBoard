@@ -185,6 +185,9 @@ void callback(char *topic, byte *payload, unsigned int length) {
         tOn = doc["params"];
         sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn, true);
     }
+    if(message.indexOf("tOff") > -1){
+        tOff = doc["params"];
+    }
     if (message.indexOf("panic") > -1) {
         panic = doc["params"];
     }
