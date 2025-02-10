@@ -36,20 +36,19 @@ const char *mqtt_server = "demo.thingsboard.io";
 #define BombaCaju "C14W6ZGOQKxuKucdCFMj"
 #define BombaGalinheiro "nvyrYVfkx4D99FG7fSIz"
 
-
 // Variáveis de Controle
 unsigned long t;
 uint8_t acc1, cont = 0, contadorMQTT = 0, contadorWiFi = 0;
 unsigned long agora, antes0, antes1;
-bool flag = false, panic = false;
+bool flag = false, panic = false, religaWifi;
 
 bool sendData(uint8_t porta1, String timestamp, uint8_t contador, unsigned long TON);
 void reconnectMQTT(uint8_t &contadorMQTT);
 void callback(char *topic, byte *payload, unsigned int length);
-void setup_wifi();
 void thingsBoardTask(void *pvParameters);
 void autoOpTask(void *pvParameters);
 void getWifiData(bool serial, int index);
+void setup_wifi();
 bool connectToWifi();
 
 void setup() {
@@ -61,7 +60,6 @@ void setup() {
         Serial.println("LittleFS Mount Failed");
         return;
     }
-    // setup_wifi();
     connectToWifi();
     _timeClient.begin();
     _timeClient.update();
@@ -99,7 +97,7 @@ void thingsBoardTask(void *pvParameters) {
         } else {
             digitalWrite(WiFi_LED, LOW);  // Acende Led WiFi
             WiFi.disconnect();
-            setup_wifi();
+            connectToWifi();
         }
         if (acc1) {
             digitalWrite(RelePin, !acc1);  // Liga o relé
@@ -149,6 +147,9 @@ void autoOpTask(void *pvParameters) {
             Serial.printf("Bomba Desligada\n");
             antes1 = agora;  // Atualiza o tempo de referência para o próximo desligamento
             digitalWrite(RelePin, true);
+            if (religaWifi) {
+                ESP.restart();
+            }
             autoOn = false;
             flag = false;  // Desliga a bomba
         }
@@ -157,40 +158,6 @@ void autoOpTask(void *pvParameters) {
 }
 
 // TODO - trocar por função de busca em JSON
-void setup_wifi() {
-    delay(10);
-    Serial.println();
-    Serial.print("Conectando a ");
-    Serial.println(ssid);
-    WiFi.begin(ssid, password);
-    while (WiFi.status() != WL_CONNECTED && contadorWiFi <= 10) {
-        delay(500);
-        Serial.print(".");
-        contadorWiFi++;
-    }
-    unsigned long t1, t2, agoraw;
-    if (contadorWiFi >= 10) {
-        t1 = millis();
-        t2 = millis();
-        while (true) {
-            agoraw = millis();
-            // if (agoraw - t1 > retornaHora(1)) {
-            if (agoraw - t1 > retornaMinuto(1)) {
-                break;
-            }
-            if (agoraw - t2 > 500) {
-                digitalWrite(WiFi_LED, !digitalRead(WiFi_LED));
-                t2 = millis();
-            }
-        }
-    } else {
-        contadorWiFi = 0;
-    }
-    Serial.println("");
-    Serial.println("WiFi conectado");
-    Serial.println("Endereço IP: ");
-    Serial.println(WiFi.localIP());
-}
 
 void callback(char *topic, byte *payload, unsigned int length) {
     /*
@@ -221,12 +188,15 @@ void callback(char *topic, byte *payload, unsigned int length) {
     if (message.indexOf("panic") > -1) {
         panic = doc["params"];
     }
+    if (message.indexOf("restart") > -1) {
+        ESP.restart();
+    }
 }
 
 void reconnectMQTT(uint8_t &contadorMQTT) {
     while (!client.connected() && contadorMQTT < 15) {
         Serial.print("Tentando conectar ao MQTT...");
-        if (client.connect("ESP32Client", BombaGalinheiro, NULL)) {
+        if (client.connect("ESP32Client", BombaCaju, NULL)) {
             Serial.println("Conectado");
             client.subscribe("v1/devices/me/rpc/request/+");
             contadorMQTT = 0;
@@ -260,31 +230,37 @@ bool connectToWifi() {
     int networkCount = cJSON_GetArraySize(cJSON_GetObjectItemCaseSensitive(cJSON_Parse(jsonString), "networks"));
     int maxAttemptsPerNetwork = MAX_ATTEMPTS;
     WiFi.mode(WIFI_MODE_STA);
-    for (int i = 0; i < networkCount; i++) {
-        getWifiData(false, i);  // Carrega as credenciais da rede com o índice 'i'
-        int contador = 0;
-        WiFi.begin(ssid, password);
-        unsigned long startTime = millis();
-        while (WiFi.status() != WL_CONNECTED && contador <= maxAttemptsPerNetwork) {
-            Serial.print(".");
-            contador++;
-            vTaskDelay(pdMS_TO_TICKS(500));
+    bool notConnected = true;
+    while (notConnected) {
+        for (int i = 0; i < networkCount; i++) {
+            getWifiData(false, i);  // Carrega as credenciais da rede com o índice 'i'
+            int contador = 0;
+            WiFi.begin(ssid, password);
+            unsigned long startTime = millis();
+            while (WiFi.status() != WL_CONNECTED && contador <= maxAttemptsPerNetwork) {
+                Serial.print(".");
+                contador++;
+                vTaskDelay(pdMS_TO_TICKS(500));
+            }
+            if (WiFi.status() == WL_CONNECTED) {
+                Serial.println();
+                Serial.println("WiFi connected");
+                Serial.print("IP address: ");
+                Serial.println(WiFi.localIP());
+                religaWifi = false; 
+                notConnected = false;
+                return true;  // Conectado com sucesso
+            } else {
+                Serial.println();
+                Serial.println("Não foi possível conectar à WiFi, tentando próxima rede.");
+                notConnected = true;
+                religaWifi = true;
+            }
         }
-        if (WiFi.status() == WL_CONNECTED) {
-            Serial.println();
-            Serial.println("WiFi connected");
-            Serial.print("IP address: ");
-            Serial.println(WiFi.localIP());
-            return true;  // Conectado com sucesso
-        } else {
-            Serial.println();
-            Serial.println("Não foi possível conectar à WiFi, tentando próxima rede.");
-        }
+        // Se não conseguir se conectar a nenhuma rede, reinicia o dispositivo
+        Serial.println("Nenhuma rede disponível foi conectada. Reiniciando após o acionamento automático.");
+        // ESP.restart();
     }
-
-    // Se não conseguir se conectar a nenhuma rede, reinicia o dispositivo
-    Serial.println("Nenhuma rede disponível foi conectada. Reiniciando...");
-    // ESP.restart();
     return false;  // Isso nunca será executado devido ao ESP.restart()
 }
 
