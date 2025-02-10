@@ -38,17 +38,20 @@ const char *mqtt_server = "demo.thingsboard.io";
 
 // Variáveis de Controle
 unsigned long t;
-uint8_t acc1, cont = 0, contadorMQTT = 0, contadorWiFi = 0;
+uint8_t acc1, cont = 0, contadorWiFi = 0;
 unsigned long agora, antes0, antes1;
 bool flag = false, panic = false, religaWifi;
 
 bool sendData(uint8_t porta1, String timestamp, uint8_t contador, unsigned long TON);
-void reconnectMQTT(uint8_t &contadorMQTT);
+void reconnectMQTT();
 void callback(char *topic, byte *payload, unsigned int length);
 void thingsBoardTask(void *pvParameters);
 void autoOpTask(void *pvParameters);
 void getWifiData(bool serial, int index);
 bool connectToWifi();
+void manageWiFi();
+void manageMQTT();
+void manageRelay();
 
 void setup() {
     Serial.begin(115200);
@@ -74,20 +77,11 @@ void thingsBoardTask(void *pvParameters) {
     connectToWifi();
     _timeClient.begin();
     _timeClient.update();
-    client.setServer(mqtt_server, 1883);
-    client.setCallback(callback);
-    reconnectMQTT(contadorMQTT);
+    manageMQTT();
     while (true) {
-        if (WiFi.status() != WL_CONNECTED) {
-            connectToWifi();
-            digitalWrite(WiFi_LED, LOW);  // Acende Led WiFi
-        } else {
-            digitalWrite(WiFi_LED, HIGH);  // Acende Led WiFi
-        }
+        manageWiFi();
         if (!client.connected()) {
-            client.setServer(mqtt_server, 1883);
-            client.setCallback(callback);
-            reconnectMQTT(contadorMQTT);
+            manageMQTT();
         } else {
             client.loop();
             _timeClient.update();
@@ -101,24 +95,11 @@ void thingsBoardTask(void *pvParameters) {
                 t = millis();
             }
         }
-        vTaskDelay(10 / portTICK_PERIOD_MS);  // Pequeno delay para não ocupar 100% da CPU
-        if (acc1) {
-            digitalWrite(RelePin, !acc1);  // Liga o relé
-            if (millis() - t0 > retornaMinuto(tOn)) {
-                acc1 = false;
-                digitalWrite(RelePin, !acc1);  // Desliga o relé
-                t0 = millis();
-            }
-        } else {
-            if (!autoOn) {
-                digitalWrite(RelePin, !acc1);  // Desliga o relé
-            }
-            t0 = millis();
-        }
-        if (panic) {
-            digitalWrite(RelePin, panic);  // desliga o relé
-            acc1 = false;                  // para o timer
-        }
+        
+        vTaskDelay(pdMS_TO_TICKS(10));  // Pequeno delay para não ocupar 100% da CPU
+        
+        manageRelay();
+
         if (digitalReadOld != digitalRead(RelePin)) {  // Se houve mudança de estado envia para o servidor
             sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn);
             digitalReadOld = digitalRead(RelePin);
@@ -153,6 +134,40 @@ void autoOpTask(void *pvParameters) {
             flag = false;  // Desliga a bomba
         }
         vTaskDelay(100 / portTICK_PERIOD_MS);  // Define a frequência de execução da autoOp
+    }
+}
+void manageWiFi() {
+    if (WiFi.status() != WL_CONNECTED) {
+        connectToWifi();
+        digitalWrite(WiFi_LED, LOW);  // Acende LED WiFi indicando desconexão
+    } else {
+        digitalWrite(WiFi_LED, HIGH);  // Acende LED WiFi indicando conexão
+    }
+}
+void manageMQTT() {
+    client.setServer(mqtt_server, 1883);
+    client.setCallback(callback);
+    reconnectMQTT();
+}
+
+void manageRelay() {
+    if (acc1) {
+        digitalWrite(RelePin, !acc1);  // Liga o relé
+        if (millis() - t0 > retornaMinuto(tOn)) {
+            acc1 = false;
+            digitalWrite(RelePin, !acc1);  // Desliga o relé
+            t0 = millis();
+        }
+    } else {
+        if (!autoOn) {
+            digitalWrite(RelePin, !acc1);  // Garante que o relé está desligado
+        }
+        t0 = millis();
+    }
+
+    if (panic) {
+        digitalWrite(RelePin, panic);  // Desliga o relé em modo pânico
+        acc1 = false;                  // Para o timer
     }
 }
 
@@ -192,7 +207,8 @@ void callback(char *topic, byte *payload, unsigned int length) {
     }
 }
 
-void reconnectMQTT(uint8_t &contadorMQTT) {
+void reconnectMQTT() {
+    int contadorMQTT = 0;
     while (!client.connected() && contadorMQTT < 15) {
         Serial.print("Tentando conectar ao MQTT...");
         if (client.connect("ESP32Client", BombaGalinheiro, NULL)) {
