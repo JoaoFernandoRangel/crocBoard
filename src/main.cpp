@@ -226,7 +226,7 @@ void callback(char *topic, byte *payload, unsigned int length) {
 void reconnectMQTT(uint8_t &contadorMQTT) {
     while (!client.connected() && contadorMQTT < 15) {
         Serial.print("Tentando conectar ao MQTT...");
-        if (client.connect("ESP32Client", BombaCaju, NULL)) {
+        if (client.connect("ESP32Client", BombaGalinheiro, NULL)) {
             Serial.println("Conectado");
             client.subscribe("v1/devices/me/rpc/request/+");
             contadorMQTT = 0;
