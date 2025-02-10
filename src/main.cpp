@@ -26,12 +26,12 @@ unsigned long flagT, t0;
 bool ligado = false;
 
 // Configurações WiFi
-const char *ssid = "Bia 2";
-const char *password = "coisafacil";
 // const char *ssid = "S23";
 // const char *password = "bemvindo";
 
 // Configurações do ThingsBoard
+const char *ssid;
+const char *password;
 const char *mqtt_server = "demo.thingsboard.io";
 #define BombaCaju "C14W6ZGOQKxuKucdCFMj"
 #define BombaGalinheiro "nvyrYVfkx4D99FG7fSIz"
@@ -249,14 +249,14 @@ bool connectToWifi() {
     if (json == NULL) {
         
         Serial.println("Erro ao analisar JSON.");
-        return;
+        
     }
     // Verifica se o campo 'networks' existe e é um array
     cJSON *networks = cJSON_GetObjectItemCaseSensitive(json, "networks");
     if (!cJSON_IsArray(networks)) {
         Serial.println("Campo 'networks' não encontrado ou não é um array.");
         cJSON_Delete(json);
-        return;
+        
     }
     // Obtém o tamanho do array
     int networkCount = cJSON_GetArraySize(networks);
