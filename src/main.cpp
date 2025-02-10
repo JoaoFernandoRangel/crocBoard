@@ -59,11 +59,6 @@ void setup() {
         Serial.println("LittleFS Mount Failed");
         return;
     }
-    connectToWifi();
-    _timeClient.begin();
-    _timeClient.update();
-    client.setServer(mqtt_server, 1883);
-    client.setCallback(callback);
     xTaskCreatePinnedToCore(thingsBoardTask, "thingsBoardTask", 10000, NULL, 1, NULL, 1);  // Executa no núcleo APP (Core 1)
     xTaskCreatePinnedToCore(autoOpTask, "autoOpTask", 10000, NULL, 1, NULL, 0);            // Executa no núcleo PRO (Core 0)
 }
@@ -76,6 +71,12 @@ uint8_t digitalReadOld, autoOn;
 // Task que executa o conteúdo original do loop() no núcleo APP (Core 1)
 void thingsBoardTask(void *pvParameters) {
     digitalReadOld = digitalRead(RelePin);
+    connectToWifi();
+    _timeClient.begin();
+    _timeClient.update();
+    client.setServer(mqtt_server, 1883);
+    client.setCallback(callback);
+    reconnectMQTT(contadorMQTT);
     while (true) {
         if (WiFi.status() != WL_CONNECTED) {
             connectToWifi();
