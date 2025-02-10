@@ -35,6 +35,7 @@ const char *password;
 const char *mqtt_server = "demo.thingsboard.io";
 #define BombaCaju "C14W6ZGOQKxuKucdCFMj"
 #define BombaGalinheiro "nvyrYVfkx4D99FG7fSIz"
+#define BombaJardim "jojb3psqbghbwcw1todo"
 
 // Variáveis de Controle
 unsigned long t;
