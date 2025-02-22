@@ -1,3 +1,4 @@
+#include <ArduinoJson.h>  // Inclua a biblioteca ArduinoJson
 #include <NTPClient.h>
 #include <PubSubClient.h>
 #include <Update.h>
@@ -177,33 +178,6 @@ void callback(char *topic, byte *payload, unsigned int length) {
     Serial.println(message);
     // Mensagem recebida [v1/devices/me/rpc/request/28]: {"method":"acc","params":false}
     //  Parseie a mensagem JSON
-    cJSON *root = cJSON_Parse(message.c_str());
-    if (root == NULL) {
-        Serial.println("Erro ao parsear JSON!");
-        return;
-    }
-    cJSON *params = cJSON_GetObjectItemCaseSensitive(root, "params");
-    cJSON *method = cJSON_GetObjectItemCaseSensitive(root, "method");
-    std::string method_str = method->valuestring;
-    std::string keys[] = {"acc1", "tOn", "tOff", "panic", "restart"};
-    if (method_str == keys[0]) {  // acc1
-        acc1 = cJSON_IsTrue(params);
-    } else if (method_str == keys[1]) {  // tOn
-        tOn = cJSON_GetNumberValue(params);
-        sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn, true);
-    } else if (method_str == keys[2]) {  // tOff
-        double temp = cJSON_GetNumberValue(params);
-        tOff = static_cast<unsigned long>(temp);
-    } else if (method_str == keys[3]) {  // panic
-        panic = cJSON_IsTrue(params);
-    } else if (method_str == keys[4]) {  // restart
-        ESP.restart();
-    }
-    /*
-    {
-    "method": "acc1",
-    "params": true
-    }
     StaticJsonDocument<200> doc;
     DeserializationError error = deserializeJson(doc, message);
     if (message.indexOf("acc1") > -1) {
@@ -223,7 +197,6 @@ void callback(char *topic, byte *payload, unsigned int length) {
     if (message.indexOf("restart") > -1) {
         ESP.restart();
     }
-    */
 }
 
 void reconnectMQTT() {
@@ -245,11 +218,11 @@ void reconnectMQTT() {
 }
 
 bool sendData(uint8_t porta1, String timestamp, uint8_t contador, unsigned long TON, bool invert) {
-    cJSON *root = cJSON_CreateObject();
+    StaticJsonDocument<200> doc;
     if (invert) {
-        cJSON_AddBoolToObject(root, "porta1", !porta1);
+        doc["porta1"] = !porta1;  // distância
     } else {
-        cJSON_AddBoolToObject(root, "porta1", porta1);
+        doc["porta1"] = porta1;  // distância
     }
     doc["timestamp"] = timestamp;
     doc["contador"] = contador;
@@ -263,11 +236,6 @@ bool sendData(uint8_t porta1, String timestamp, uint8_t contador, unsigned long 
     } else {
         return false;
     }
-    // if (invert) {
-    //     doc["porta1"] = !porta1;  // distância
-    // } else {
-    //     doc["porta1"] = porta1;  // distância
-    // }
 }
 bool connectToWifi() {
     int maxAttemptsPerNetwork = MAX_ATTEMPTS;
