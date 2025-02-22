@@ -178,7 +178,7 @@ void callback(char *topic, byte *payload, unsigned int length) {
     Serial.println(message);
     // Mensagem recebida [v1/devices/me/rpc/request/28]: {"method":"acc","params":false}
     //  Parseie a mensagem JSON
-    StaticJsonDocument<200> doc;
+    JsonDocument doc;
     DeserializationError error = deserializeJson(doc, message);
     if (message.indexOf("acc1") > -1) {
         acc1 = doc["params"];
@@ -218,7 +218,7 @@ void reconnectMQTT() {
 }
 
 bool sendData(uint8_t porta1, String timestamp, uint8_t contador, unsigned long TON, bool invert) {
-    StaticJsonDocument<200> doc;
+    JsonDocument doc;
     if (invert) {
         doc["porta1"] = !porta1;  // distância
     } else {
