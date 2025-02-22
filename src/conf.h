@@ -1,17 +1,19 @@
-#define Bomba 3
-
+#define Bomba 4
+#define inverted true
 #define BombaCaju "C14W6ZGOQKxuKucdCFMj"
 #define BombaGalinheiro "nvyrYVfkx4D99FG7fSIz"
 #define BombaJardim "jojb3psqbghbwcw1todo"
+#define BombaCampos "OyRXHDwhKX0vmCEp6IYx"
 
-#if Bomba == 3
+#if Bomba == 4
+#define BombaTarget BombaCampos
+#elif Bomba == 3
 #define BombaTarget BombaJardim
 #elif Bomba == 2
 #define BombaTarget BombaGalinheiro
 #elif Bomba == 1
 #define BombaTarget BombaCaju
 #endif
-
 
 
 #define retornaSegundo(x) (1000 * (x))

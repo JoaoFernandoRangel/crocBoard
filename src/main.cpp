@@ -28,7 +28,7 @@ const char *mqtt_server = "demo.thingsboard.io";
 
 // Variáveis de Controle
 unsigned long t;
-uint8_t  cont = 0, contadorWiFi = 0;
+uint8_t cont = 0, contadorWiFi = 0;
 unsigned long agora, antes0, antes1;
 bool flag = false, panic = false, religaWifi, acc1 = false;
 
@@ -47,7 +47,8 @@ void setup() {
     Serial.begin(115200);
     pinMode(RelePin, OUTPUT);
     pinMode(WiFi_LED, OUTPUT);
-    digitalWrite(RelePin, HIGH);
+    digitalWrite(RelePin, inverted);
+
     if (!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)) {
         Serial.println("LittleFS Mount Failed");
         return;
@@ -76,7 +77,7 @@ void thingsBoardTask(void *pvParameters) {
             client.loop();
             _timeClient.update();
             if (millis() - t > retornaSegundo(30)) {
-                if (sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn, false)) {
+                if (sendData(digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn, inverted)) {
                     cont++;
                     _timeClient.update();
                 } else {
@@ -87,7 +88,7 @@ void thingsBoardTask(void *pvParameters) {
         }
         manageRelay();
         if (digitalReadOld != digitalRead(RelePin)) {  // Se houve mudança de estado envia para o servidor
-            sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn, false);
+            sendData(digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn, inverted);
             digitalReadOld = digitalRead(RelePin);
         }
         vTaskDelay(pdMS_TO_TICKS(10));  // Pequeno delay para não ocupar 100% da CPU
@@ -103,9 +104,9 @@ void autoOpTask(void *pvParameters) {
         if (!flag && (agora - antes0 >= retornaHora(tOff))) {
             Serial.printf("Passou %d minuto\n", tOff);
             Serial.printf("Bomba Ligada\n");
-            antes0 = agora;  // Atualiza o tempo de referência para o próximo acionamento
-            antes1 = agora;  // Atualiza o tempo de referência para o próximo acionamento
-            digitalWrite(RelePin, false);
+            antes0 = agora;
+            antes1 = agora;
+            digitalWrite(RelePin, !inverted);  // Liga o relé
             autoOn = true;
             flag = true;  // Liga a bomba
         }
@@ -114,14 +115,15 @@ void autoOpTask(void *pvParameters) {
         else if (flag && (agora - antes1 >= retornaMinuto(tOn))) {
             Serial.printf("Passou %d segundos\n", tOn);
             Serial.printf("Bomba Desligada\n");
-            antes1 = agora;  // Atualiza o tempo de referência para o próximo desligamento
-            digitalWrite(RelePin, true);
+            antes1 = agora;
+            digitalWrite(RelePin, inverted);  // Desliga o relé
             autoOn = false;
             flag = false;  // Desliga a bomba
         }
-        vTaskDelay(pdMS_TO_TICKS(100));  // Define a frequência de execução da autoOp
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
+
 void manageWiFi() {
     if (WiFi.status() != WL_CONNECTED) {
         connectToWifi();
@@ -138,22 +140,22 @@ void manageMQTT() {
 
 void manageRelay() {
     if (acc1) {
-        digitalWrite(RelePin, !acc1);  // Liga o relé
+        digitalWrite(RelePin, !inverted);  // Liga o relé
         if (millis() - t0 > retornaMinuto(tOn)) {
             acc1 = false;
-            digitalWrite(RelePin, !acc1);  // Desliga o relé
+            digitalWrite(RelePin, inverted);  // Desliga o relé
             t0 = millis();
         }
     } else {
         if (!autoOn) {
-            digitalWrite(RelePin, !acc1);  // Garante que o relé está desligado
+            digitalWrite(RelePin, inverted);  // Garante que o relé está desligado
         }
         t0 = millis();
     }
 
     if (panic) {
-        digitalWrite(RelePin, panic);  // Desliga o relé em modo pânico
-        acc1 = false;                  // Para o timer
+        digitalWrite(RelePin, inverted);  // Desliga o relé em modo pânico
+        acc1 = false;                     // Para o timer
     }
 }
 
@@ -183,10 +185,11 @@ void callback(char *topic, byte *payload, unsigned int length) {
     }
     if (message.indexOf("tOn") > -1) {
         tOn = doc["params"];
-        sendData(!digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn, true);
+        sendData(digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn, !inverted);
     }
-    if(message.indexOf("tOff") > -1){
+    if (message.indexOf("tOff") > -1) {
         tOff = doc["params"];
+        sendData(digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn, !inverted);
     }
     if (message.indexOf("panic") > -1) {
         panic = doc["params"];
@@ -224,6 +227,7 @@ bool sendData(uint8_t porta1, String timestamp, uint8_t contador, unsigned long 
     doc["timestamp"] = timestamp;
     doc["contador"] = contador;
     doc["tOn"] = TON;
+    doc["tOff"] = tOff;  // variável global
     char buffer[256];
     size_t packetsize = serializeJson(doc, buffer);
     if (client.publish("v1/devices/me/telemetry", buffer, packetsize)) {
