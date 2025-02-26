@@ -1,5 +1,5 @@
 #define Bomba 4
-#define inverted true
+#define inverted false
 #define BombaCaju "C14W6ZGOQKxuKucdCFMj"
 #define BombaGalinheiro "nvyrYVfkx4D99FG7fSIz"
 #define BombaJardim "jojb3psqbghbwcw1todo"

@@ -185,11 +185,11 @@ void callback(char *topic, byte *payload, unsigned int length) {
     }
     if (message.indexOf("tOn") > -1) {
         tOn = doc["params"];
-        sendData(digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn, !inverted);
+        sendData(digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn, inverted);
     }
     if (message.indexOf("tOff") > -1) {
         tOff = doc["params"];
-        sendData(digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn, !inverted);
+        sendData(digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn, inverted);
     }
     if (message.indexOf("panic") > -1) {
         panic = doc["params"];
