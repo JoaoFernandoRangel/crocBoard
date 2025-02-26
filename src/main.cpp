@@ -182,14 +182,13 @@ void callback(char *topic, byte *payload, unsigned int length) {
     DeserializationError error = deserializeJson(doc, message);
     if (message.indexOf("acc1") > -1) {
         acc1 = doc["params"];
+        manageRelay();
     }
     if (message.indexOf("tOn") > -1) {
         tOn = doc["params"];
-        sendData(digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn, inverted);
     }
     if (message.indexOf("tOff") > -1) {
         tOff = doc["params"];
-        sendData(digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn, inverted);
     }
     if (message.indexOf("panic") > -1) {
         panic = doc["params"];
@@ -197,6 +196,7 @@ void callback(char *topic, byte *payload, unsigned int length) {
     if (message.indexOf("restart") > -1) {
         ESP.restart();
     }
+    sendData(digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn, inverted);
 }
 
 void reconnectMQTT() {
