@@ -228,6 +228,7 @@ bool sendData(uint8_t porta1, String timestamp, uint8_t contador, unsigned long 
     doc["contador"] = contador;
     doc["tOn"] = TON;
     doc["tOff"] = tOff; // variável global
+    doc["panic"] = panic; // variável global
     char buffer[256];
     size_t packetsize = serializeJson(doc, buffer);
     if (client.publish("v1/devices/me/telemetry", buffer, packetsize)) {
