@@ -1,4 +1,4 @@
-#include <ArduinoJson.h>  // Inclua a biblioteca ArduinoJson
+#include <ArduinoJson.h> // Inclua a biblioteca ArduinoJson
 #include <NTPClient.h>
 #include <PubSubClient.h>
 #include <Update.h>
@@ -53,12 +53,12 @@ void setup() {
         Serial.println("LittleFS Mount Failed");
         return;
     }
-    xTaskCreatePinnedToCore(thingsBoardTask, "thingsBoardTask", 10000, NULL, 1, NULL, 1);  // Executa no núcleo APP (Core 1)
-    xTaskCreatePinnedToCore(autoOpTask, "autoOpTask", 10000, NULL, 1, NULL, 0);            // Executa no núcleo PRO (Core 0)
+    xTaskCreatePinnedToCore(thingsBoardTask, "thingsBoardTask", 10000, NULL, 1, NULL, 1); // Executa no núcleo APP (Core 1)
+    xTaskCreatePinnedToCore(autoOpTask, "autoOpTask", 10000, NULL, 1, NULL, 0);           // Executa no núcleo PRO (Core 0)
 }
 
 void loop() {
-    vTaskSuspend(NULL);  // O loop original está vazio pois a task loopTask está rodando no Core 1
+    vTaskSuspend(NULL); // O loop original está vazio pois a task loopTask está rodando no Core 1
 }
 
 uint8_t digitalReadOld, autoOn;
@@ -87,11 +87,11 @@ void thingsBoardTask(void *pvParameters) {
             }
         }
         manageRelay();
-        if (digitalReadOld != digitalRead(RelePin)) {  // Se houve mudança de estado envia para o servidor
+        if (digitalReadOld != digitalRead(RelePin)) { // Se houve mudança de estado envia para o servidor
             sendData(digitalRead(RelePin), _timeClient.getFormattedTime(), cont, tOn, inverted);
             digitalReadOld = digitalRead(RelePin);
         }
-        vTaskDelay(pdMS_TO_TICKS(10));  // Pequeno delay para não ocupar 100% da CPU
+        vTaskDelay(pdMS_TO_TICKS(10)); // Pequeno delay para não ocupar 100% da CPU
     }
 }
 
@@ -106,9 +106,9 @@ void autoOpTask(void *pvParameters) {
             Serial.printf("Bomba Ligada\n");
             antes0 = agora;
             antes1 = agora;
-            digitalWrite(RelePin, !inverted);  // Liga o relé
+            digitalWrite(RelePin, !inverted); // Liga o relé
             autoOn = true;
-            flag = true;  // Liga a bomba
+            flag = true; // Liga a bomba
         }
         // Se a bomba está ligada e o tempo ton passou
         // else if (flag && (agora - antes1 >= retornaSegundo(5))){
@@ -116,9 +116,9 @@ void autoOpTask(void *pvParameters) {
             Serial.printf("Passou %d segundos\n", tOn);
             Serial.printf("Bomba Desligada\n");
             antes1 = agora;
-            digitalWrite(RelePin, inverted);  // Desliga o relé
+            digitalWrite(RelePin, inverted); // Desliga o relé
             autoOn = false;
-            flag = false;  // Desliga a bomba
+            flag = false; // Desliga a bomba
         }
         vTaskDelay(pdMS_TO_TICKS(100));
     }
@@ -127,9 +127,9 @@ void autoOpTask(void *pvParameters) {
 void manageWiFi() {
     if (WiFi.status() != WL_CONNECTED) {
         connectToWifi();
-        digitalWrite(WiFi_LED, LOW);  // Acende LED WiFi indicando desconexão
+        digitalWrite(WiFi_LED, LOW); // Acende LED WiFi indicando desconexão
     } else {
-        digitalWrite(WiFi_LED, HIGH);  // Acende LED WiFi indicando conexão
+        digitalWrite(WiFi_LED, HIGH); // Acende LED WiFi indicando conexão
     }
 }
 void manageMQTT() {
@@ -140,22 +140,22 @@ void manageMQTT() {
 
 void manageRelay() {
     if (acc1) {
-        digitalWrite(RelePin, !inverted);  // Liga o relé
+        digitalWrite(RelePin, !inverted); // Liga o relé
         if (millis() - t0 > retornaMinuto(tOn)) {
             acc1 = false;
-            digitalWrite(RelePin, inverted);  // Desliga o relé
+            digitalWrite(RelePin, inverted); // Desliga o relé
             t0 = millis();
         }
     } else {
         if (!autoOn) {
-            digitalWrite(RelePin, inverted);  // Garante que o relé está desligado
+            digitalWrite(RelePin, inverted); // Garante que o relé está desligado
         }
         t0 = millis();
     }
 
     if (panic) {
-        digitalWrite(RelePin, inverted);  // Desliga o relé em modo pânico
-        acc1 = false;                     // Para o timer
+        digitalWrite(RelePin, inverted); // Desliga o relé em modo pânico
+        acc1 = false;                    // Para o timer
     }
 }
 
@@ -220,14 +220,14 @@ void reconnectMQTT() {
 bool sendData(uint8_t porta1, String timestamp, uint8_t contador, unsigned long TON, bool invert) {
     JsonDocument doc;
     if (invert) {
-        doc["porta1"] = !porta1;  // distância
+        doc["porta1"] = !porta1; // distância
     } else {
-        doc["porta1"] = porta1;  // distância
+        doc["porta1"] = porta1; // distância
     }
     doc["timestamp"] = timestamp;
     doc["contador"] = contador;
     doc["tOn"] = TON;
-    doc["tOff"] = tOff;  // variável global
+    doc["tOff"] = tOff; // variável global
     char buffer[256];
     size_t packetsize = serializeJson(doc, buffer);
     if (client.publish("v1/devices/me/telemetry", buffer, packetsize)) {
@@ -269,8 +269,8 @@ bool connectToWifi() {
             cJSON *pwd = cJSON_GetObjectItemCaseSensitive(network, "PWD");
 
             if (cJSON_IsString(ssid) && cJSON_IsString(pwd)) {
-                ssid_str = ssid->valuestring;  // Atribui o valor do JSON
-                pwd_str = pwd->valuestring;    // Atribui o valor do JSON
+                ssid_str = ssid->valuestring; // Atribui o valor do JSON
+                pwd_str = pwd->valuestring;   // Atribui o valor do JSON
 
                 Serial.print("SSID: ");
                 Serial.println(ssid_str.c_str());
@@ -291,7 +291,7 @@ bool connectToWifi() {
                     Serial.println(WiFi.localIP());
                     notConnected = false;
                     cJSON_Delete(json);
-                    return true;  // Conectado com sucesso
+                    return true; // Conectado com sucesso
                 } else {
                     Serial.println();
                     Serial.println("Não foi possível conectar à WiFi, tentando próxima rede.");
@@ -301,7 +301,7 @@ bool connectToWifi() {
         }
     }
     cJSON_Delete(json);
-    return false;  // Isso nunca será executado devido ao ESP.restart()
+    return false; // Isso nunca será executado devido ao ESP.restart()
 }
 
 void getWifiData(bool serial, int index) {

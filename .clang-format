@@ -1,3 +1,7 @@
 BasedOnStyle: Google
 IndentWidth: 4
-ColumnLimit: 165
+ColumnLimit: 130
+AllowShortFunctionsOnASingleLine: Empty
+BreakBeforeBraces: Attach
+SpacesBeforeTrailingComments: 1
+SortIncludes: false
