@@ -184,12 +184,12 @@ void callback(char *topic, byte *payload, unsigned int length) {
         acc1 = doc["params"];
         manageRelay();
     }
-    // if (message.indexOf("tOn") > -1) {
-    //     tOn = doc["params"];
-    // }
-    // if (message.indexOf("tOff") > -1) {
-    //     tOff = doc["params"];
-    // }
+    if (message.indexOf("tOn") > -1) {
+        tOn = doc["params"];
+    }
+    if (message.indexOf("tOff") > -1) {
+        tOff = doc["params"];
+    }
     if (message.indexOf("panic") > -1) {
         panic = doc["params"];
     }

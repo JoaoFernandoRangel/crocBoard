@@ -1,4 +1,4 @@
-#define Bomba 4
+#define Bomba 1
 #define inverted false
 
 #define BombaDevelop "OyRXHDwhKX0vmCEp6IYx"
